@@ -421,4 +421,5 @@ def match_selfie(payload: MatchSelfieRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    # Bind strictly to internal loopback 127.0.0.1 so external traffic routes exclusively to Node.js
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False)

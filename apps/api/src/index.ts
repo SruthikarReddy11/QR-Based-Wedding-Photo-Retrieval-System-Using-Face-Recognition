@@ -69,7 +69,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(500).json({ error: err.message || 'Internal server error.' });
 });
 
-app.listen(ENV.PORT, () => {
-  console.log(`✨ WedSnap API Server running on http://localhost:${ENV.PORT}`);
+app.listen(ENV.PORT, '0.0.0.0', () => {
+  console.log(`✨ WedSnap API Server running on http://0.0.0.0:${ENV.PORT}`);
   console.log(`🚀 Environment: ${ENV.NODE_ENV}`);
 });
