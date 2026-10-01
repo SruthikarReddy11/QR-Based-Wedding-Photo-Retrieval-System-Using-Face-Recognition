@@ -9,6 +9,8 @@ import { adminRouter } from './routes/admin.routes.js';
 import path from 'path';
 import fs from 'fs';
 
+import { getProjectRoot } from './db/diskDb.js';
+
 const app = express();
 
 // Middlewares - Allow all origins in production or local development
@@ -21,7 +23,7 @@ app.use(
 app.use(express.json({ limit: '25mb' }));
 
 // Static files for uploaded photos
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+app.use('/uploads', express.static(path.resolve(getProjectRoot(), 'uploads')));
 
 // Healthcheck & Welcome
 app.get('/health', (req, res) => {

@@ -24,9 +24,22 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('wedsnap_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  // If authorization header is already explicitly provided (e.g. from getAdminHeaders), preserve it
+  const existingAuth =
+    config.headers.get?.('Authorization') ||
+    config.headers.Authorization ||
+    (config.headers as any)['authorization'];
+
+  if (!existingAuth) {
+    const isAdminRoute = config.url?.includes('/admin') && !config.url?.includes('/admin/verify-pin');
+    const adminToken = localStorage.getItem('wedsnap_admin_token');
+    const userToken = localStorage.getItem('wedsnap_token');
+
+    if (isAdminRoute && adminToken) {
+      config.headers.Authorization = `Bearer ${adminToken}`;
+    } else if (userToken) {
+      config.headers.Authorization = `Bearer ${userToken}`;
+    }
   }
   return config;
 });
@@ -35,12 +48,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('wedsnap_token');
-      localStorage.removeItem('wedsnap_user');
-      if (window.location.pathname.startsWith('/dashboard')) {
-        window.location.href = '/login';
+      const isAdminRoute = error.config?.url?.includes('/admin');
+      if (!isAdminRoute) {
+        localStorage.removeItem('wedsnap_token');
+        localStorage.removeItem('wedsnap_user');
+        if (window.location.pathname.startsWith('/dashboard')) {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);
   }
 );
+

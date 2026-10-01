@@ -176,10 +176,12 @@ export const DashboardPage: React.FC = () => {
   // Filtered events
   const filteredEvents = useMemo(() => {
     return events.filter((ev) => {
+      const q = eventSearchQuery.toLowerCase();
       const matchesSearch =
-        ev.coupleNames.toLowerCase().includes(eventSearchQuery.toLowerCase()) ||
-        ev.venueCity.toLowerCase().includes(eventSearchQuery.toLowerCase()) ||
-        (ev.venueName && ev.venueName.toLowerCase().includes(eventSearchQuery.toLowerCase()));
+        (ev.coupleNames || '').toLowerCase().includes(q) ||
+        (ev.venueCity || '').toLowerCase().includes(q) ||
+        (ev.venueName || '').toLowerCase().includes(q) ||
+        (ev.title || '').toLowerCase().includes(q);
 
       if (!matchesSearch) return false;
       if (eventFilterStatus === 'active') return ev.status !== 'COMPLETED';

@@ -78,7 +78,28 @@ export class EventService {
     } catch {
       let results = Array.from(diskDb.events.values());
       if (photographerId) {
-        results = results.filter((e) => e.photographerId === photographerId);
+        // Collect all possible IDs associated with this photographer / user
+        const matchingIds = new Set<string>([photographerId]);
+        for (const p of diskDb.photographers.values()) {
+          if (p.id === photographerId || p.userId === photographerId) {
+            matchingIds.add(p.id);
+            matchingIds.add(p.userId);
+            matchingIds.add(`photo_${p.userId}`);
+          }
+        }
+        for (const u of diskDb.users.values()) {
+          if (u.id === photographerId || `photo_${u.id}` === photographerId) {
+            matchingIds.add(u.id);
+            matchingIds.add(`photo_${u.id}`);
+          }
+        }
+
+        // If only 1 user exists in database, all events belong to this photographer
+        if (diskDb.users.size <= 1) {
+          return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        }
+
+        results = results.filter((e) => matchingIds.has(e.photographerId));
       }
       return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }

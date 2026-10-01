@@ -4,7 +4,7 @@ import os from 'os';
 import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express';
 import { ENV } from '../config/env.js';
-import { diskDb } from '../db/diskDb.js';
+import { diskDb, getProjectRoot } from '../db/diskDb.js';
 import { EventService } from '../services/event.service.js';
 import { PhotoService } from '../services/photo.service.js';
 import { verifyAdminPin } from '../config/adminPin.js';
@@ -85,7 +85,7 @@ export class AdminController {
       const containerPercent = ((nodeRssMB / containerRamLimitMB) * 100).toFixed(1);
 
       // Disk storage calculation
-      const uploadsDir = path.resolve(process.cwd(), 'uploads');
+      const uploadsDir = path.resolve(getProjectRoot(), 'uploads');
       const uploadsSizeBytes = getDirSize(uploadsDir);
       const uploadsSizeMB = (uploadsSizeBytes / (1024 * 1024)).toFixed(2);
 
@@ -168,8 +168,19 @@ export class AdminController {
   static async listUsers(_req: Request, res: Response): Promise<void> {
     try {
       const allUsers = Array.from(diskDb.users.values()).map((u: any) => {
+        // Collect all photographer IDs for this user
+        const photoIds = new Set<string>([u.id, `photo_${u.id}`]);
+        for (const p of diskDb.photographers.values()) {
+          if (p.userId === u.id) {
+            photoIds.add(p.id);
+          }
+        }
+
         // Count events created by this user
-        const userEvents = Array.from(diskDb.events.values()).filter((e: any) => e.photographerId === u.id);
+        const userEvents = Array.from(diskDb.events.values()).filter(
+          (e: any) => photoIds.has(e.photographerId) || (diskDb.users.size === 1)
+        );
+
         return {
           id: u.id,
           fullName: u.fullName || u.name,
@@ -190,18 +201,41 @@ export class AdminController {
   static async deleteUser(req: Request, res: Response): Promise<void> {
     try {
       const userId = String(req.params.id);
-      if (!diskDb.users.has(userId)) {
+      let userKey: string | null = null;
+      let targetUser: any = null;
+
+      for (const [key, u] of diskDb.users.entries()) {
+        if (u.id === userId || key === userId || u.email === userId) {
+          userKey = key;
+          targetUser = u;
+          break;
+        }
+      }
+
+      if (!targetUser || !userKey) {
         res.status(404).json({ error: 'User not found.' });
         return;
       }
 
+      // Collect all photographer IDs for this user
+      const photoIds = new Set<string>([targetUser.id, `photo_${targetUser.id}`]);
+      for (const [pId, p] of diskDb.photographers.entries()) {
+        if (p.userId === targetUser.id) {
+          photoIds.add(pId);
+          photoIds.add(p.id);
+          diskDb.photographers.delete(pId);
+        }
+      }
+
       // Delete all events belonging to this user
-      const userEvents = Array.from(diskDb.events.values()).filter((e: any) => e.photographerId === userId);
+      const userEvents = Array.from(diskDb.events.values()).filter(
+        (e: any) => photoIds.has(e.photographerId) || e.photographerId === targetUser.id
+      );
       for (const ev of userEvents) {
         await EventService.deleteEvent(ev.id);
       }
 
-      diskDb.users.delete(userId);
+      diskDb.users.delete(userKey);
       diskDb.save();
 
       res.status(200).json({
@@ -216,12 +250,31 @@ export class AdminController {
   static async listAllEvents(_req: Request, res: Response): Promise<void> {
     try {
       const events = Array.from(diskDb.events.values()).map((ev: any) => {
-        const creator = diskDb.users.get(ev.photographerId);
+        const photographer =
+          diskDb.photographers.get(ev.photographerId) ||
+          Array.from(diskDb.photographers.values()).find(
+            (p: any) => p.id === ev.photographerId || p.userId === ev.photographerId
+          );
+
+        let creator: any = null;
+        if (photographer?.userId) {
+          creator = Array.from(diskDb.users.values()).find((u: any) => u.id === photographer.userId);
+        }
+        if (!creator) {
+          creator = Array.from(diskDb.users.values()).find(
+            (u: any) => u.id === ev.photographerId || u.email === ev.photographerId
+          );
+        }
+        if (!creator && diskDb.users.size === 1) {
+          creator = Array.from(diskDb.users.values())[0];
+        }
+
         const faces = diskDb.faces.get(ev.id) || [];
         return {
           ...ev,
-          creatorName: creator ? creator.fullName || creator.name : 'Unknown',
-          creatorEmail: creator ? creator.email : 'N/A',
+          name: ev.title || ev.coupleNames || 'Wedding Event',
+          creatorName: creator ? creator.fullName || creator.name : 'Master Studio',
+          creatorEmail: creator ? creator.email : 'studio@wedsnap.ai',
           totalFacesIndexed: faces.length,
         };
       });

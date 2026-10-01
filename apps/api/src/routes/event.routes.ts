@@ -7,9 +7,11 @@ import { requireAuth } from '../middleware/auth.js';
 import path from 'path';
 import fs from 'fs';
 
+import { getProjectRoot } from '../db/diskDb.js';
+
 export const eventRouter = Router();
 
-const tempUploadDir = path.resolve(process.cwd(), 'uploads', 'tmp');
+const tempUploadDir = path.resolve(getProjectRoot(), 'uploads', 'tmp');
 if (!fs.existsSync(tempUploadDir)) {
   fs.mkdirSync(tempUploadDir, { recursive: true });
 }

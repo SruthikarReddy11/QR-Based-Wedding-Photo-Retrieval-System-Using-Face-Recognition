@@ -132,6 +132,12 @@ export const AdminPortalPage: React.FC = () => {
       setEventsList(eventsRes.data || []);
     } catch (err: any) {
       console.error('Failed to fetch admin data:', err);
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setIsAuthenticated(false);
+        localStorage.removeItem('wedsnap_admin_pin_verified');
+        localStorage.removeItem('wedsnap_admin_token');
+        setPinError(err.response?.data?.error || 'Master Admin session expired. Please re-enter Master PIN.');
+      }
     } finally {
       setLoading(false);
     }
@@ -677,7 +683,7 @@ export const AdminPortalPage: React.FC = () => {
                   {eventsList.map((ev: any) => (
                     <tr key={ev.id} className="hover:bg-rose-50/30 transition">
                       <td className="py-3.5 px-4 font-semibold text-gray-900">
-                        <div>{ev.name}</div>
+                        <div>{ev.coupleNames || ev.title || ev.name || 'Untitled Event'}</div>
                         <div className="text-[10px] text-gray-400 font-mono">slug: {ev.slug}</div>
                       </td>
                       <td className="py-3.5 px-4 text-gray-600">
@@ -706,7 +712,7 @@ export const AdminPortalPage: React.FC = () => {
                           <ExternalLink className="w-3 h-3" />
                         </a>
                         <button
-                          onClick={() => handleDeleteEvent(ev.id, ev.name)}
+                          onClick={() => handleDeleteEvent(ev.id, ev.coupleNames || ev.title || ev.name || 'Event')}
                           className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-[#9A0026] font-medium cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5 inline mr-1" />

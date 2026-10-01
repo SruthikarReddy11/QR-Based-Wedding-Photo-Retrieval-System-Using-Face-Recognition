@@ -9,6 +9,23 @@ export interface DbSchema {
   faces: Record<string, any[]>; // eventId -> StoredFace[]
 }
 
+export function getProjectRoot(): string {
+  let curr = process.cwd();
+  for (let i = 0; i < 4; i++) {
+    if (
+      fs.existsSync(path.join(curr, 'data', 'wednap_db.json')) ||
+      fs.existsSync(path.join(curr, 'data')) ||
+      (fs.existsSync(path.join(curr, 'package.json')) && fs.existsSync(path.join(curr, 'apps')))
+    ) {
+      return curr;
+    }
+    const parent = path.dirname(curr);
+    if (parent === curr) break;
+    curr = parent;
+  }
+  return process.cwd();
+}
+
 class DiskDatabase {
   private dbPath: string;
   public users: Map<string, any> = new Map();
@@ -19,7 +36,8 @@ class DiskDatabase {
 
   constructor() {
     // Save inside project data directory
-    const dataDir = path.resolve(process.cwd(), 'data');
+    const rootDir = getProjectRoot();
+    const dataDir = path.resolve(rootDir, 'data');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
@@ -43,6 +61,35 @@ class DiskDatabase {
       this.events = new Map(Object.entries(data.events || {}));
       this.photos = new Map(Object.entries(data.photos || {}));
       this.faces = new Map(Object.entries(data.faces || {}));
+
+      // Ensure every user has a photographer profile
+      for (const user of this.users.values()) {
+        const hasPhoto = Array.from(this.photographers.values()).some((p: any) => p.userId === user.id);
+        if (!hasPhoto) {
+          const newPhotoId = `photo_${user.id}`;
+          this.photographers.set(newPhotoId, {
+            id: newPhotoId,
+            userId: user.id,
+            studioName: user.fullName ? `${user.fullName}'s Studio` : 'Studio',
+          });
+        }
+      }
+
+      // If single photographer/user exists, link any orphaned event to that photographer
+      if (this.photographers.size >= 1) {
+        const primaryPhoto = Array.from(this.photographers.values())[0];
+        let patched = false;
+        for (const [evId, ev] of this.events.entries()) {
+          if (!this.photographers.has(ev.photographerId)) {
+            ev.photographerId = primaryPhoto.id;
+            this.events.set(evId, ev);
+            patched = true;
+          }
+        }
+        if (patched) {
+          this.save();
+        }
+      }
 
       console.log(`[DiskDB] Loaded persistent data: ${this.events.size} event(s), ${this.photos.size} photo(s), ${this.users.size} user(s).`);
     } catch (err: any) {

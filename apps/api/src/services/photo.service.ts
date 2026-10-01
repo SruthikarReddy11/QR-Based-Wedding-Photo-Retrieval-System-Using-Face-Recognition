@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { prisma } from '../db/prisma.js';
 import { ENV } from '../config/env.js';
-import { diskDb } from '../db/diskDb.js';
+import { diskDb, getProjectRoot } from '../db/diskDb.js';
 
 export interface StoredPhoto {
   id: string;
@@ -37,7 +37,7 @@ export const facesStore = diskDb.faces;
 
 export class PhotoService {
   static getUploadDir(eventId: string): string {
-    const uploadDir = path.resolve(process.cwd(), 'uploads', eventId);
+    const uploadDir = path.resolve(getProjectRoot(), 'uploads', eventId);
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -198,7 +198,7 @@ export class PhotoService {
 
   static async deletePhotosByEvent(eventId: string): Promise<void> {
     // Delete all files in uploads/eventId
-    const uploadDir = path.resolve(process.cwd(), 'uploads', eventId);
+    const uploadDir = path.resolve(getProjectRoot(), 'uploads', eventId);
     if (fs.existsSync(uploadDir)) {
       try {
         fs.rmSync(uploadDir, { recursive: true, force: true });

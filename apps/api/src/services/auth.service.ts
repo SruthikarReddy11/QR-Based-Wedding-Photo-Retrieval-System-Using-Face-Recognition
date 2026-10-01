@@ -181,12 +181,28 @@ export class AuthService {
         throw new Error('Invalid email or password.');
       }
 
+      // Look up photographer profile for this user
+      let photographer = Array.from(diskDb.photographers.values()).find(
+        (p: any) => p.userId === memUser.id
+      );
+
+      let photographerId = photographer?.id;
+      if (!photographerId) {
+        photographerId = `photo_${memUser.id}`;
+        diskDb.photographers.set(photographerId, {
+          id: photographerId,
+          userId: memUser.id,
+          studioName: memUser.fullName ? `${memUser.fullName}'s Studio` : 'Photography Studio',
+        });
+        diskDb.save();
+      }
+
       const token = jwt.sign(
         {
           userId: memUser.id,
           email: memUser.email,
           role: memUser.role,
-          photographerId: `photo_${memUser.id}`,
+          photographerId,
         },
         ENV.JWT_SECRET,
         { expiresIn: '7d' }
@@ -228,15 +244,18 @@ export class AuthService {
     } catch {
       for (const u of diskDb.users.values()) {
         if (u.id === userId) {
+          const photographer = Array.from(diskDb.photographers.values()).find(
+            (p: any) => p.userId === u.id
+          );
           return {
             id: u.id,
             email: u.email,
             fullName: u.fullName,
             phoneNumber: u.phoneNumber,
             role: u.role,
-            photographer: {
+            photographer: photographer || {
               id: `photo_${u.id}`,
-              studioName: 'Photography Studio',
+              studioName: `${u.fullName || 'Studio'}'s Photography`,
             },
             createdAt: u.createdAt,
           };
