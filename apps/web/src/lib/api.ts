@@ -1,0 +1,46 @@
+import axios from 'axios';
+
+export const API_BASE = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '')
+  : typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+  ? window.location.origin
+  : 'http://localhost:5000';
+
+export const getImageUrl = (path: string): string => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
+export const api = axios.create({
+  baseURL:
+    import.meta.env.VITE_API_URL ||
+    (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? `${window.location.origin}/api/v1`
+      : 'http://localhost:5000/api/v1'),
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('wedsnap_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('wedsnap_token');
+      localStorage.removeItem('wedsnap_user');
+      if (window.location.pathname.startsWith('/dashboard')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);

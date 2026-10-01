@@ -20,9 +20,7 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
-lib/
-lib64/
+# Python build artifacts
 parts/
 sdist/
 var/
@@ -30,6 +28,10 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Ensure web source libraries are tracked
+!apps/web/src/lib/
+!apps/web/src/lib/**
 
 # Environment & Secrets
 .env
