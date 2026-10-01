@@ -1,0 +1,46 @@
+import express from 'express';
+import cors from 'cors';
+import { ENV } from './config/env.js';
+import { authRouter } from './routes/auth.routes.js';
+import { eventRouter } from './routes/event.routes.js';
+import { publicRouter } from './routes/public.routes.js';
+
+import path from 'path';
+
+const app = express();
+
+// Middlewares
+app.use(cors({
+  origin: [ENV.APP_URL, 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'],
+  credentials: true,
+}));
+app.use(express.json({ limit: '25mb' }));
+
+// Static files for uploaded photos
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+
+// Healthcheck & Welcome
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'WedSnap API',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Mount versioned API routes
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/events', eventRouter);
+app.use('/api/v1/public', publicRouter);
+
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('[Unhandled Error]', err);
+  res.status(500).json({ error: err.message || 'Internal server error.' });
+});
+
+app.listen(ENV.PORT, () => {
+  console.log(`✨ WedSnap API Server running on http://localhost:${ENV.PORT}`);
+  console.log(`🚀 Environment: ${ENV.NODE_ENV}`);
+});

@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-ivory: #FAF8F5;
+    --card-blush: #F5EBE6;
+    --brand-rose: #D84061;
+    --brand-rose-hover: #C03251;
+    --brand-gold: #C5A880;
+    --charcoal: #1E232A;
+    --slate-muted: #64748B;
+  }
+
+  body {
+    background-color: var(--bg-ivory);
+    background-image: url('/assets/scanner_bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    color: var(--charcoal);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+}

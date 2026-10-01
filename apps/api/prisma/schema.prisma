@@ -1,0 +1,172 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  PHOTOGRAPHER
+}
+
+enum PhotoStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PROCESSING
+  INDEXED
+  FAILED
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  PROCESSING
+  COMPLETED
+  ARCHIVED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  fullName     String        @map("full_name")
+  phoneNumber  String?       @map("phone_number")
+  role         Role          @default(PHOTOGRAPHER)
+  photographer Photographer?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Photographer {
+  id               String   @id @default(uuid())
+  userId           String   @unique @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studioName       String   @map("studio_name")
+  websiteUrl       String?  @map("website_url")
+  watermarkUrl     String?  @map("watermark_url")
+  storageUsedBytes BigInt   @default(0) @map("storage_used_bytes")
+  events           Event[]
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("photographers")
+}
+
+model Event {
+  id                   String         @id @default(uuid())
+  photographerId       String         @map("photographer_id")
+  photographer         Photographer   @relation(fields: [photographerId], references: [id], onDelete: Restrict)
+  title                String
+  slug                 String         @unique
+  coupleNames          String         @map("couple_names")
+  eventDate            DateTime       @map("event_date")
+  venueCity            String         @map("venue_city")
+  venueName            String?        @map("venue_name")
+  description          String?
+  coverPhotoUrl        String?        @map("cover_photo_url")
+  isActive             Boolean        @default(true) @map("is_active")
+  allowFullGalleryView Boolean        @default(true) @map("allow_full_gallery_view")
+  allowGuestDownloads  Boolean        @default(true) @map("allow_guest_downloads")
+  photoCount           Int            @default(0) @map("photo_count")
+  faceCount            Int            @default(0) @map("face_count")
+  status               EventStatus    @default(ACTIVE)
+  photos               Photo[]
+  photoFaces           PhotoFace[]
+  guestSessions        GuestSession[]
+  searchSessions       SearchSession[]
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  @@index([slug])
+  @@index([photographerId])
+  @@map("events")
+}
+
+model Photo {
+  id                 String         @id @default(uuid())
+  eventId            String         @map("event_id")
+  event              Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  storageKeyOriginal String         @map("storage_key_original")
+  storageKeyPreview  String?        @map("storage_key_preview")
+  storageKeyThumb    String?        @map("storage_key_thumb")
+  fileName           String         @map("file_name")
+  fileSizeBytes      BigInt         @map("file_size_bytes")
+  mimeType           String         @map("mime_type")
+  width              Int?
+  height             Int?
+  status             PhotoStatus    @default(PENDING_UPLOAD)
+  faceCount          Int            @default(0) @map("face_count")
+  errorMessage       String?        @map("error_message")
+  uploadedAt         DateTime?      @map("uploaded_at")
+  processedAt        DateTime?      @map("processed_at")
+  photoFaces         PhotoFace[]
+  searchResults      SearchResult[]
+  createdAt          DateTime       @default(now()) @map("created_at")
+
+  @@index([eventId, status])
+  @@map("photos")
+}
+
+model PhotoFace {
+  id                  String   @id @default(uuid())
+  photoId             String   @map("photo_id")
+  photo               Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  eventId             String   @map("event_id")
+  event               Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // Stored as JSON or PostgreSQL vector in DB; Prisma handles vector via raw SQL or Unsupported("vector(512)")
+  boundingBox         Json     @map("bounding_box") // { x, y, width, height }
+  detectionConfidence Float    @map("detection_confidence")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([eventId])
+  @@index([photoId])
+  @@map("photo_faces")
+}
+
+model GuestSession {
+  id             String          @id @default(uuid())
+  eventId        String          @map("event_id")
+  event          Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ipHash         String          @map("ip_hash")
+  userAgent      String?         @map("user_agent")
+  searchSessions SearchSession[]
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  @@index([eventId])
+  @@map("guest_sessions")
+}
+
+model SearchSession {
+  id             String         @id @default(uuid())
+  guestSessionId String         @map("guest_session_id")
+  guestSession   GuestSession   @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+  eventId        String         @map("event_id")
+  event          Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  matchesFound   Int            @default(0) @map("matches_found")
+  executionTimeMs Int           @default(0) @map("execution_time_ms")
+  searchResults  SearchResult[]
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@index([eventId])
+  @@map("search_sessions")
+}
+
+model SearchResult {
+  id              String        @id @default(uuid())
+  searchSessionId String        @map("search_session_id")
+  searchSession   SearchSession @relation(fields: [searchSessionId], references: [id], onDelete: Cascade)
+  photoId         String        @map("photo_id")
+  photo           Photo         @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  similarityScore Float         @map("similarity_score")
+  isDownloaded    Boolean       @default(false) @map("is_downloaded")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@index([searchSessionId])
+  @@index([photoId])
+  @@map("search_results")
+}

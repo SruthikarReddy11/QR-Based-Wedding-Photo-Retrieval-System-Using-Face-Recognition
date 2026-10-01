@@ -1,0 +1,130 @@
+[
+  {
+    "subject_id": "subject_1_cross_age",
+    "label": "year_0_selfie",
+    "file_path": "evaluation/dataset/subject_1_cross_age/year_0_selfie.jpg",
+    "type": "probe_selfie",
+    "year_offset": 0,
+    "description": "Current selfie (Year 0 / 2026)"
+  },
+  {
+    "subject_id": "subject_1_cross_age",
+    "label": "year_0_event",
+    "file_path": "evaluation/dataset/subject_1_cross_age/year_0_event.jpg",
+    "type": "gallery",
+    "year_offset": 0,
+    "description": "Same year event photo"
+  },
+  {
+    "subject_id": "subject_1_cross_age",
+    "label": "year_1_event",
+    "file_path": "evaluation/dataset/subject_1_cross_age/year_1_event.jpg",
+    "type": "gallery",
+    "year_offset": 1,
+    "description": "1 year prior photo"
+  },
+  {
+    "subject_id": "subject_1_cross_age",
+    "label": "year_2_event",
+    "file_path": "evaluation/dataset/subject_1_cross_age/year_2_event.jpg",
+    "type": "gallery",
+    "year_offset": 2,
+    "description": "2 years prior photo"
+  },
+  {
+    "subject_id": "subject_1_cross_age",
+    "label": "year_3_event",
+    "file_path": "evaluation/dataset/subject_1_cross_age/year_3_event.jpg",
+    "type": "gallery",
+    "year_offset": 3,
+    "description": "3 years prior photo"
+  },
+  {
+    "subject_id": "subject_1_cross_age",
+    "label": "year_4_event",
+    "file_path": "evaluation/dataset/subject_1_cross_age/year_4_event.jpg",
+    "type": "gallery",
+    "year_offset": 4,
+    "description": "4 years prior photo (cross-age challenge)"
+  },
+  {
+    "subject_id": "subject_1_cross_age",
+    "label": "year_5_event",
+    "file_path": "evaluation/dataset/subject_1_cross_age/year_5_event.jpg",
+    "type": "gallery",
+    "year_offset": 5,
+    "description": "5 years prior photo (cross-age challenge)"
+  },
+  {
+    "subject_id": "subject_2_variations",
+    "label": "selfie_standard",
+    "file_path": "evaluation/dataset/subject_2_variations/selfie_standard.jpg",
+    "type": "probe_selfie",
+    "year_offset": null,
+    "description": "Standard selfie probe"
+  },
+  {
+    "subject_id": "subject_2_variations",
+    "label": "variation_smile",
+    "file_path": "evaluation/dataset/subject_2_variations/variation_smile.jpg",
+    "type": "gallery",
+    "year_offset": null,
+    "description": "Big smile expression"
+  },
+  {
+    "subject_id": "subject_2_variations",
+    "label": "variation_glasses",
+    "file_path": "evaluation/dataset/subject_2_variations/variation_glasses.jpg",
+    "type": "gallery",
+    "year_offset": null,
+    "description": "Subject wearing eyewear/glasses"
+  },
+  {
+    "subject_id": "subject_2_variations",
+    "label": "variation_pose_angle",
+    "file_path": "evaluation/dataset/subject_2_variations/variation_pose_angle.jpg",
+    "type": "gallery",
+    "year_offset": null,
+    "description": "Semi-profile 30-degree yaw angle"
+  },
+  {
+    "subject_id": "subject_2_variations",
+    "label": "variation_dim_lighting",
+    "file_path": "evaluation/dataset/subject_2_variations/variation_dim_lighting.jpg",
+    "type": "gallery",
+    "year_offset": null,
+    "description": "Dim/dusk lighting condition"
+  },
+  {
+    "subject_id": "distractors_negative",
+    "label": "distractor_1",
+    "file_path": "evaluation/dataset/distractors_negative/distractor_1.jpg",
+    "type": "negative",
+    "year_offset": null,
+    "description": "Different person (Female A)"
+  },
+  {
+    "subject_id": "distractors_negative",
+    "label": "distractor_2",
+    "file_path": "evaluation/dataset/distractors_negative/distractor_2.jpg",
+    "type": "negative",
+    "year_offset": null,
+    "description": "Different person (Female B)"
+  },
+  {
+    "subject_id": "distractors_negative",
+    "label": "distractor_3",
+    "file_path": "evaluation/dataset/distractors_negative/distractor_3.jpg",
+    "type": "negative",
+    "year_offset": null,
+    "description": "Different person (Male C)"
+  },
+  {
+    "subject_id": "distractors_negative",
+    "label": "distractor_4",
+    "file_path": "evaluation/dataset/distractors_negative/distractor_4.jpg",
+    "type": "negative",
+    "year_offset": null,
+    "description": "Different person (Female C)"
+  }
+]

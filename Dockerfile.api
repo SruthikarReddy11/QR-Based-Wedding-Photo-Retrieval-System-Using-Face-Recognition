@@ -1,0 +1,36 @@
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Copy root monorepo configs
+COPY package*.json ./
+COPY packages/shared/package*.json ./packages/shared/
+COPY apps/api/package*.json ./apps/api/
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY packages/ ./packages/
+COPY apps/api/ ./apps/api/
+COPY tsconfig*.json ./
+
+# Build API TypeScript
+RUN npm run build --workspace=apps/api
+
+# --- Production Runner Stage ---
+FROM node:20-slim AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Copy node_modules and built dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/api ./apps/api
+
+EXPOSE 5000
+
+CMD ["node", "apps/api/dist/index.js"]

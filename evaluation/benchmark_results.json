@@ -1,0 +1,68 @@
+[
+  {
+    "Configuration": "Current SFace Baseline",
+    "Precision": "75.0%",
+    "Recall": "17.6%",
+    "Top-1": "0.0%",
+    "Top-5": "100.0%",
+    "FP": 1,
+    "FN": 14,
+    "4\u20135 Yr Recall": "0.0%",
+    "Avg Infer Time": "11.0ms"
+  },
+  {
+    "Configuration": "New ArcFace R50",
+    "Precision": "75.0%",
+    "Recall": "17.6%",
+    "Top-1": "0.0%",
+    "Top-5": "50.0%",
+    "FP": 1,
+    "FN": 14,
+    "4\u20135 Yr Recall": "0.0%",
+    "Avg Infer Time": "120.8ms"
+  },
+  {
+    "Configuration": "ArcFace + Quality Filtering",
+    "Precision": "75.0%",
+    "Recall": "17.6%",
+    "Top-1": "0.0%",
+    "Top-5": "50.0%",
+    "FP": 1,
+    "FN": 14,
+    "4\u20135 Yr Recall": "0.0%",
+    "Avg Infer Time": "120.8ms"
+  },
+  {
+    "Configuration": "ArcFace + Multi-Selfie (Strategy A: Max)",
+    "Precision": "62.5%",
+    "Recall": "29.4%",
+    "Top-1": "0.0%",
+    "Top-5": "100.0%",
+    "FP": 3,
+    "FN": 12,
+    "4\u20135 Yr Recall": "0.0%",
+    "Avg Infer Time": "120.8ms"
+  },
+  {
+    "Configuration": "ArcFace + Multi-Selfie (Strategy B: Fused Mean)",
+    "Precision": "62.5%",
+    "Recall": "29.4%",
+    "Top-1": "0.0%",
+    "Top-5": "100.0%",
+    "FP": 3,
+    "FN": 12,
+    "4\u20135 Yr Recall": "0.0%",
+    "Avg Infer Time": "120.8ms"
+  },
+  {
+    "Configuration": "ArcFace + Quality + Multi-Selfie + ReRank",
+    "Precision": "62.5%",
+    "Recall": "29.4%",
+    "Top-1": "50.0%",
+    "Top-5": "100.0%",
+    "FP": 3,
+    "FN": 12,
+    "4\u20135 Yr Recall": "0.0%",
+    "Avg Infer Time": "120.8ms"
+  }
+]
