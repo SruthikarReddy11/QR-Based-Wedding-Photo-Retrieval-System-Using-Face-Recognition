@@ -6,14 +6,17 @@ import { eventRouter } from './routes/event.routes.js';
 import { publicRouter } from './routes/public.routes.js';
 
 import path from 'path';
+import fs from 'fs';
 
 const app = express();
 
-// Middlewares
-app.use(cors({
-  origin: [ENV.APP_URL, 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'],
-  credentials: true,
-}));
+// Middlewares - Allow all origins in production or local development
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '25mb' }));
 
 // Static files for uploaded photos
@@ -33,6 +36,30 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/events', eventRouter);
 app.use('/api/v1/public', publicRouter);
+
+// Serve Web Frontend SPA in production if built dist exists
+const possibleDistPaths = [
+  path.resolve(process.cwd(), 'apps/web/dist'),
+  path.resolve(process.cwd(), '../web/dist'),
+  path.resolve(process.cwd(), 'dist/web'),
+];
+const distPath = possibleDistPaths.find((p) => fs.existsSync(p));
+
+if (distPath) {
+  console.log(`[Static] Serving web frontend SPA from: ${distPath}`);
+  app.use(express.static(distPath));
+
+  app.get('*', (req, res, next) => {
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/uploads') ||
+      req.path.startsWith('/health')
+    ) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
