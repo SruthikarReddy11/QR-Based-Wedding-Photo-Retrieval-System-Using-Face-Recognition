@@ -7,7 +7,7 @@ export const adminRouter = Router();
 // Public PIN verification route
 adminRouter.post('/verify-pin', AdminController.verifyPin);
 
-// Protected routes - require PIN 2006 or Admin JWT
+// Protected routes - require Master Admin authorization
 adminRouter.use(requireAdmin);
 
 adminRouter.get('/stats', AdminController.getSystemStats);

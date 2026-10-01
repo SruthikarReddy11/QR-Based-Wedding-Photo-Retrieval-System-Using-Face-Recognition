@@ -45,7 +45,7 @@ export const App: React.FC = () => {
             {/* Guest Mobile Experience */}
             <Route path="/e/:slug" element={<GuestEventPage />} />
 
-            {/* Master Admin Portal (PIN 2006) */}
+            {/* Master Admin Portal */}
             <Route path="/admin" element={<AdminPortalPage />} />
 
             {/* Fallback */}

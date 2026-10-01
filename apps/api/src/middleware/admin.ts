@@ -1,15 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ENV } from '../config/env.js';
+import { verifyAdminPin } from '../config/adminPin.js';
 
 export interface AdminRequest extends Request {
   adminUser?: any;
 }
 
 export const requireAdmin = (req: AdminRequest, res: Response, next: NextFunction): void => {
-  // 1. Check direct admin PIN header
+  // 1. Check direct admin PIN header via cryptographic digest
   const pinHeader = req.headers['x-admin-pin'];
-  if (pinHeader === '2006') {
+  if (pinHeader && verifyAdminPin(pinHeader)) {
     req.adminUser = { role: 'ADMIN', name: 'Master Administrator' };
     return next();
   }
@@ -17,7 +18,7 @@ export const requireAdmin = (req: AdminRequest, res: Response, next: NextFunctio
   // 2. Check JWT Bearer token
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Admin authorization required. Please provide valid PIN or Admin token.' });
+    res.status(401).json({ error: 'Master Admin authentication required. Please provide valid authorization.' });
     return;
   }
 
@@ -31,6 +32,6 @@ export const requireAdmin = (req: AdminRequest, res: Response, next: NextFunctio
     req.adminUser = decoded;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Invalid or expired admin session. Re-enter PIN 2006.' });
+    res.status(401).json({ error: 'Invalid or expired admin session. Please re-enter Master PIN.' });
   }
 };

@@ -318,7 +318,7 @@ export const DashboardPage: React.FC = () => {
               <span>Admin Portal</span>
             </div>
             <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-100 text-[#9A0026] font-bold">
-              PIN: 2006
+              RESTRICTED
             </span>
           </button>
         </nav>

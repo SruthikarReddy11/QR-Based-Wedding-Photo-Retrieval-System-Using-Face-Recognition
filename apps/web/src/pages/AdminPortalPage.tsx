@@ -65,7 +65,7 @@ interface SystemStats {
 export const AdminPortalPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Authentication State with PIN 2006
+  // Master Admin Authentication State
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -80,31 +80,35 @@ export const AdminPortalPage: React.FC = () => {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'metrics' | 'events' | 'users' | 'database'>('metrics');
 
-  const adminHeaders = {
-    headers: { 'x-admin-pin': '2006' },
+  const getAdminHeaders = () => {
+    const token = localStorage.getItem('wedsnap_admin_token');
+    return {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    };
   };
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinError(null);
 
-    if (pin.trim() === '2006') {
-      try {
-        const res = await api.post('/admin/verify-pin', { pin: '2006' });
-        if (res.data.token) {
-          localStorage.setItem('wedsnap_admin_token', res.data.token);
-        }
-        localStorage.setItem('wedsnap_admin_pin_verified', 'true');
-        setIsAuthenticated(true);
-        fetchAdminData();
-      } catch {
-        // Fallback to local pin check if network issue
-        localStorage.setItem('wedsnap_admin_pin_verified', 'true');
-        setIsAuthenticated(true);
-        fetchAdminData();
+    const candidate = pin.trim();
+    if (!candidate) {
+      setPinError('Please enter Master PIN.');
+      return;
+    }
+
+    try {
+      const res = await api.post('/admin/verify-pin', { pin: candidate });
+      if (res.data.token) {
+        localStorage.setItem('wedsnap_admin_token', res.data.token);
       }
-    } else {
-      setPinError('Invalid Master PIN. Please enter code 2006.');
+      localStorage.setItem('wedsnap_admin_pin_verified', 'true');
+      setIsAuthenticated(true);
+      fetchAdminData();
+    } catch (err: any) {
+      setPinError(err.response?.data?.error || 'Invalid Master Security PIN. Access denied.');
     }
   };
 
@@ -119,9 +123,9 @@ export const AdminPortalPage: React.FC = () => {
     setLoading(true);
     try {
       const [statsRes, usersRes, eventsRes] = await Promise.all([
-        api.get('/admin/stats', adminHeaders),
-        api.get('/admin/users', adminHeaders),
-        api.get('/admin/events', adminHeaders),
+        api.get('/admin/stats', getAdminHeaders()),
+        api.get('/admin/users', getAdminHeaders()),
+        api.get('/admin/events', getAdminHeaders()),
       ]);
       setStats(statsRes.data);
       setUsersList(usersRes.data || []);
@@ -145,7 +149,7 @@ export const AdminPortalPage: React.FC = () => {
   const handlePurgeMemory = async () => {
     try {
       setActionMessage('Cleaning RAM and flushing AI tensors...');
-      const res = await api.post('/admin/purge-memory', {}, adminHeaders);
+      const res = await api.post('/admin/purge-memory', {}, getAdminHeaders());
       setActionMessage(res.data.message || 'RAM cleaned successfully!');
       await fetchAdminData();
       setTimeout(() => setActionMessage(null), 4000);
@@ -159,7 +163,7 @@ export const AdminPortalPage: React.FC = () => {
       return;
     }
     try {
-      await api.delete(`/admin/events/${eventId}`, adminHeaders);
+      await api.delete(`/admin/events/${eventId}`, getAdminHeaders());
       setActionMessage(`Event "${name}" deleted.`);
       await fetchAdminData();
       setTimeout(() => setActionMessage(null), 3000);
@@ -173,7 +177,7 @@ export const AdminPortalPage: React.FC = () => {
       return;
     }
     try {
-      await api.delete(`/admin/users/${userId}`, adminHeaders);
+      await api.delete(`/admin/users/${userId}`, getAdminHeaders());
       setActionMessage(`User "${email}" deleted.`);
       await fetchAdminData();
       setTimeout(() => setActionMessage(null), 3000);
@@ -182,8 +186,23 @@ export const AdminPortalPage: React.FC = () => {
     }
   };
 
-  const handleDownloadBackup = () => {
-    window.open(`${api.defaults.baseURL}/admin/backup?pin=2006`, '_blank');
+  const handleDownloadBackup = async () => {
+    try {
+      const res = await api.get('/admin/backup', {
+        responseType: 'blob',
+        ...getAdminHeaders(),
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `wedsnap_backup_${Date.now()}.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Download backup failed: ${err.message}`);
+    }
   };
 
   const handleRestoreDatabase = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,7 +213,7 @@ export const AdminPortalPage: React.FC = () => {
     reader.onload = async () => {
       try {
         const json = JSON.parse(reader.result as string);
-        await api.post('/admin/restore', json, adminHeaders);
+        await api.post('/admin/restore', json, getAdminHeaders());
         alert('Database restored successfully!');
         await fetchAdminData();
       } catch (err: any) {
@@ -232,7 +251,7 @@ export const AdminPortalPage: React.FC = () => {
                   maxLength={4}
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
-                  placeholder="Enter PIN (2006)"
+                  placeholder="••••"
                   className="w-full py-4 text-center tracking-[0.5em] text-2xl font-mono font-bold rounded-2xl border-2 border-rose-200 focus:border-[#9A0026] focus:ring-4 focus:ring-[#9A0026]/20 bg-white/95 text-gray-900 transition-all outline-none"
                   autoFocus
                 />
@@ -250,8 +269,7 @@ export const AdminPortalPage: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
-            <span>Security Code: 2006</span>
+          <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-center text-xs text-gray-400">
             <button
               onClick={() => navigate('/dashboard')}
               className="text-[#9A0026] font-medium hover:underline cursor-pointer"
@@ -284,7 +302,7 @@ export const AdminPortalPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-serif font-bold text-gray-900 tracking-tight">WedSnap Master Admin</h1>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#9A0026]/10 text-[#9A0026] border border-[#9A0026]/20">
-                PIN: 2006 AUTHENTICATED
+                MASTER ADMIN AUTHORIZED
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-0.5">

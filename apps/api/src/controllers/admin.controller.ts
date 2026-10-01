@@ -7,6 +7,7 @@ import { ENV } from '../config/env.js';
 import { diskDb } from '../db/diskDb.js';
 import { EventService } from '../services/event.service.js';
 import { PhotoService } from '../services/photo.service.js';
+import { verifyAdminPin } from '../config/adminPin.js';
 
 function getDirSize(dirPath: string): number {
   let size = 0;
@@ -29,11 +30,11 @@ function getDirSize(dirPath: string): number {
 }
 
 export class AdminController {
-  // 1. PIN Verification (PIN: 2006)
+  // 1. Master Security PIN Verification
   static async verifyPin(req: Request, res: Response): Promise<void> {
     try {
       const { pin } = req.body;
-      if (String(pin).trim() !== '2006') {
+      if (!verifyAdminPin(pin)) {
         res.status(401).json({ error: 'Incorrect Master PIN. Access denied.' });
         return;
       }
@@ -41,7 +42,7 @@ export class AdminController {
       // Generate 24-hour master admin token
       const token = jwt.sign(
         {
-          id: 'master_admin_2006',
+          id: 'master_admin_session',
           role: 'ADMIN',
           isAdmin: true,
           email: 'admin@wedsnap.ai',
