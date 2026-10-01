@@ -35,7 +35,8 @@ RUN chmod +x start.sh
 # 5. Ensure AI models are present (auto-downloads if missing from Git)
 RUN python scripts/download_models.py
 
-# 6. Build Web Frontend (SPA) and Node.js API
+# 6. Generate Prisma client & Build Web Frontend + Node.js API
+RUN npx prisma generate --schema=apps/api/prisma/schema.prisma || true
 RUN npm run build:web
 RUN npm run build:api
 

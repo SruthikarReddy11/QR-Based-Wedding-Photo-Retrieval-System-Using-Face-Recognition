@@ -12,6 +12,7 @@
     "dev:web": "npm run dev --workspace=apps/web",
     "dev:api": "npm run dev --workspace=apps/api",
     "build:web": "npm run build --workspace=apps/web",
-    "build:api": "npm run build --workspace=apps/api"
+    "build:api": "npm run build --workspace=apps/api",
+    "prisma:generate": "prisma generate --schema=apps/api/prisma/schema.prisma"
   }
 }
