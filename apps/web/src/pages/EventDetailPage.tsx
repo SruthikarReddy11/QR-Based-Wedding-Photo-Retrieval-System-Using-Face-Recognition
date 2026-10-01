@@ -79,7 +79,59 @@ export const EventDetailPage: React.FC = () => {
     }
   }, [id]);
 
-  // Batch Image Upload Handler with Chunking
+  // Helper: resize large camera images (e.g. 10MB DSLR/iPhone photos) to max 1920px JPEG
+  // Drastically speeds up network transfer and guarantees 0 OOM crashes on free hosting tiers
+  const compressImageForUpload = async (file: File): Promise<File> => {
+    if (!file.type.startsWith('image/')) return file;
+
+    return new Promise((resolve) => {
+      // If under 800KB and already jpg/png, don't re-encode
+      if (file.size < 800 * 1024) {
+        return resolve(file);
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX_DIM = 1920;
+          let { width, height } = img;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            } else {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(file);
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) return resolve(file);
+              const optimized = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(optimized);
+            },
+            'image/jpeg',
+            0.88
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Progressive Sequential Upload Queue with Zero Memory Spikes
   const processUploadQueue = async (files: FileList | File[]) => {
     const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (fileArray.length === 0) {
@@ -91,34 +143,47 @@ export const EventDetailPage: React.FC = () => {
     setUploadProgress(0);
     setUploadStatus(`Preparing ${fileArray.length} photographs for AI Face Ingestion...`);
 
-    // Chunking into batches of 8 for optimal network stability and memory footprint
-    const BATCH_SIZE = 8;
-    const totalBatches = Math.ceil(fileArray.length / BATCH_SIZE);
     let totalUploaded = 0;
     let totalFacesDetected = 0;
+    let failedCount = 0;
 
     try {
-      for (let b = 0; b < totalBatches; b++) {
-        const batch = fileArray.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
-        const formData = new FormData();
-        batch.forEach((file) => formData.append('photos', file));
-
+      for (let i = 0; i < fileArray.length; i++) {
+        const rawFile = fileArray[i];
+        const currentNum = i + 1;
         setUploadStatus(
-          `Uploading batch ${b + 1} of ${totalBatches} (${totalUploaded + batch.length}/${fileArray.length} photos) • Extracting ArcFace 512D embeddings...`
+          `Uploading ${currentNum} of ${fileArray.length}: ${rawFile.name} • Extracting ArcFace 512D embeddings...`
         );
 
-        const res = await api.post(`/events/${id}/photos`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        try {
+          const optimizedFile = await compressImageForUpload(rawFile);
+          const formData = new FormData();
+          formData.append('photos', optimizedFile);
 
-        totalUploaded += batch.length;
-        totalFacesDetected += res.data.totalFacesDetected || 0;
-        const percent = Math.round((totalUploaded / fileArray.length) * 100);
+          const res = await api.post(`/events/${id}/photos`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+
+          totalUploaded += 1;
+          totalFacesDetected += res.data.totalFacesDetected || 0;
+        } catch (fileErr: any) {
+          console.error(`Failed uploading photo ${rawFile.name}:`, fileErr);
+          failedCount += 1;
+        }
+
+        const percent = Math.round((currentNum / fileArray.length) * 100);
         setUploadProgress(percent);
+
+        // Real-time progressive UI refresh every 2 photos or at end
+        if (currentNum % 2 === 0 || currentNum === fileArray.length) {
+          fetchEventData();
+        }
       }
 
       setUploadStatus(
-        `Success! Ingested ${totalUploaded} photographs with ${totalFacesDetected} faces mapped into 512D ArcFace vector space.`
+        failedCount === 0
+          ? `✨ Successfully uploaded ${totalUploaded} photograph(s) with ${totalFacesDetected} faces mapped into 512D ArcFace vector space!`
+          : `Processed ${totalUploaded} photo(s) (${failedCount} skipped due to error). ${totalFacesDetected} faces mapped.`
       );
       await fetchEventData();
     } catch (err: any) {

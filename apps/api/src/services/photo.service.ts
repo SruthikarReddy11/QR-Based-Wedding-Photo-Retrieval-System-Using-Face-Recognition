@@ -51,24 +51,43 @@ export class PhotoService {
     const finalFileName = `${photoId}${ext}`;
     const finalFilePath = path.join(uploadDir, finalFileName);
 
-    // Write file to uploads directory
-    fs.writeFileSync(finalFilePath, file.buffer);
+    // Save file to uploads directory (move from diskStorage temp or write buffer)
+    if (file.path && fs.existsSync(file.path)) {
+      fs.copyFileSync(file.path, finalFilePath);
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        // ignore tmp unlink error
+      }
+    } else if (file.buffer) {
+      fs.writeFileSync(finalFilePath, file.buffer);
+    }
 
     const photoUrl = `/uploads/${eventId}/${finalFileName}`;
     let detectedFaces: any[] = [];
     let width = 0;
     let height = 0;
 
-    // Call Python AI microservice to extract real 512D face embeddings and quality metrics
+    // Call Python AI microservice to extract real 512D face embeddings (0-copy disk path first)
     try {
-      const formData = new FormData();
-      const blob = new Blob([new Uint8Array(file.buffer)], { type: file.mimetype });
-      formData.append('file', blob, file.originalname);
-
-      const aiRes = await fetch(`${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/extract-embeddings`, {
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      let aiRes = await fetch(`${aiServiceUrl}/extract-embeddings-path`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath: finalFilePath }),
       });
+
+      // Fallback to multipart if path extraction not supported
+      if (!aiRes.ok && fs.existsSync(finalFilePath)) {
+        const fileBytes = fs.readFileSync(finalFilePath);
+        const formData = new FormData();
+        const blob = new Blob([fileBytes], { type: file.mimetype || 'image/jpeg' });
+        formData.append('file', blob, file.originalname);
+        aiRes = await fetch(`${aiServiceUrl}/extract-embeddings`, {
+          method: 'POST',
+          body: formData,
+        });
+      }
 
       if (aiRes.ok) {
         const aiData = await aiRes.json();

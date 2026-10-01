@@ -1,4 +1,5 @@
 import os
+import gc
 import cv2
 import numpy as np
 import base64
@@ -191,9 +192,21 @@ def align_and_extract_arcface(img: np.ndarray, landmarks: np.ndarray) -> List[fl
     return feat.tolist()
 
 def extract_faces_from_image(img: np.ndarray) -> List[Dict[str, Any]]:
-    h, w = img.shape[:2]
-    detector.setInputSize((w, h))
-    _, faces = detector.detect(img)
+    orig_h, orig_w = img.shape[:2]
+
+    # Memory optimization: resize for YuNet detection if large, preventing OOM spikes
+    MAX_DET_DIM = 1600
+    scale = 1.0
+    if max(orig_h, orig_w) > MAX_DET_DIM:
+        scale = MAX_DET_DIM / float(max(orig_h, orig_w))
+        det_w, det_h = int(orig_w * scale), int(orig_h * scale)
+        det_img = cv2.resize(img, (det_w, det_h), interpolation=cv2.INTER_AREA)
+    else:
+        det_w, det_h = orig_w, orig_h
+        det_img = img
+
+    detector.setInputSize((det_w, det_h))
+    _, faces = detector.detect(det_img)
 
     results = []
     if faces is not None:
@@ -202,10 +215,19 @@ def extract_faces_from_image(img: np.ndarray) -> List[Dict[str, Any]]:
             if score < 0.45:
                 continue
 
-            x, y, fw, fh = map(int, face[0:4])
+            if scale != 1.0:
+                inv_scale = 1.0 / scale
+                x = int(face[0] * inv_scale)
+                y = int(face[1] * inv_scale)
+                fw = int(face[2] * inv_scale)
+                fh = int(face[3] * inv_scale)
+                landmarks = (face[4:14].reshape(5, 2) * inv_scale).astype(np.float32)
+            else:
+                x, y, fw, fh = map(int, face[0:4])
+                landmarks = face[4:14].reshape(5, 2).astype(np.float32)
+
             box = {"x": max(0, x), "y": max(0, y), "width": fw, "height": fh}
-            landmarks = face[4:14].reshape(5, 2)
-            total_area = w * h
+            total_area = orig_w * orig_h
             box_area = fw * fh
             box_ratio = float(box_area / total_area) if total_area > 0 else 0.0
 
@@ -219,6 +241,9 @@ def extract_faces_from_image(img: np.ndarray) -> List[Dict[str, Any]]:
                 "quality": quality,
                 "embedding": embedding_512d
             })
+
+    if det_img is not img:
+        del det_img
     return results
 
 @app.get("/health")
@@ -237,14 +262,45 @@ def health():
         }
     }
 
+class PathExtractRequest(BaseModel):
+    filePath: str
+
+@app.post("/extract-embeddings-path")
+def extract_embeddings_path(payload: PathExtractRequest):
+    """Memory-efficient extraction directly reading from disk path (0-copy HTTP transfer)."""
+    try:
+        if not os.path.exists(payload.filePath):
+            raise HTTPException(status_code=404, detail=f"File not found: {payload.filePath}")
+
+        img = cv2.imread(payload.filePath)
+        if img is None:
+            raise HTTPException(status_code=400, detail="Could not read image file")
+
+        h, w = img.shape[:2]
+        faces_data = extract_faces_from_image(img)
+        del img
+        gc.collect()
+
+        return {
+            "width": w,
+            "height": h,
+            "faceCount": len(faces_data),
+            "faces": faces_data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.post("/extract-embeddings")
 async def extract_embeddings(file: UploadFile = File(...)):
     """Extracts all faces, quality metrics, and 512-dimensional ArcFace embeddings."""
     try:
         contents = await file.read()
         img = decode_image_bytes(contents)
+        del contents
         h, w = img.shape[:2]
         faces_data = extract_faces_from_image(img)
+        del img
+        gc.collect()
         return {
             "width": w,
             "height": h,

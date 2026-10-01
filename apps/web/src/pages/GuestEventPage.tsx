@@ -133,11 +133,40 @@ export const GuestEventPage: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const performRealSearch = async (selfieBase64: string) => {
+  const optimizeSelfieBase64 = async (b64: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 1080;
+        let { width, height } = img;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(b64);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.88));
+      };
+      img.onerror = () => resolve(b64);
+      img.src = b64;
+    });
+  };
+
+  const performRealSearch = async (rawBase64: string) => {
     setStep('processing');
     setSearchError(null);
 
     try {
+      const selfieBase64 = await optimizeSelfieBase64(rawBase64);
       const res = await api.post(`/public/events/${slug}/search`, { selfieBase64 });
       const data = res.data;
 
