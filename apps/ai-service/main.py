@@ -262,6 +262,16 @@ def health():
         }
     }
 
+@app.post("/purge-memory")
+def purge_memory():
+    """Forces garbage collection and releases unreferenced OpenCV and PyTorch tensors."""
+    before_collected = gc.collect()
+    return {
+        "status": "success",
+        "objects_collected": before_collected,
+        "message": "AI microservice memory purged successfully"
+    }
+
 class PathExtractRequest(BaseModel):
     filePath: str
 

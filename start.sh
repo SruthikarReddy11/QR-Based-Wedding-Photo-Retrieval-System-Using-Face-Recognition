@@ -17,6 +17,12 @@ AI_PID=$!
 sleep 3
 cd /app
 
+# Optional: if PostgreSQL is connected, automatically push database schema
+if [ -n "$DATABASE_URL" ]; then
+  echo "📦 PostgreSQL Database URL detected. Auto-syncing Prisma schema..."
+  npx prisma db push --schema=/app/apps/api/prisma/schema.prisma --accept-data-loss || true
+fi
+
 # 2. Start Node.js API Server & Web Frontend on $PORT
 export PORT="${PORT:-5000}"
 export AI_SERVICE_URL="http://127.0.0.1:8000"

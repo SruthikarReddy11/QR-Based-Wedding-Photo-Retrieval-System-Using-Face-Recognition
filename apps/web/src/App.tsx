@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { CreateEventPage } from './pages/CreateEventPage';
 import { EventDetailPage } from './pages/EventDetailPage';
 import { GuestEventPage } from './pages/GuestEventPage';
+import { AdminPortalPage } from './pages/AdminPortalPage';
 import { useAuthStore } from './stores/authStore';
 
 export const App: React.FC = () => {
@@ -43,6 +44,9 @@ export const App: React.FC = () => {
 
             {/* Guest Mobile Experience */}
             <Route path="/e/:slug" element={<GuestEventPage />} />
+
+            {/* Master Admin Portal (PIN 2006) */}
+            <Route path="/admin" element={<AdminPortalPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

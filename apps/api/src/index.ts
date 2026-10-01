@@ -4,6 +4,7 @@ import { ENV } from './config/env.js';
 import { authRouter } from './routes/auth.routes.js';
 import { eventRouter } from './routes/event.routes.js';
 import { publicRouter } from './routes/public.routes.js';
+import { adminRouter } from './routes/admin.routes.js';
 
 import path from 'path';
 import fs from 'fs';
@@ -36,6 +37,7 @@ app.get('/health', (req, res) => {
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/events', eventRouter);
 app.use('/api/v1/public', publicRouter);
+app.use('/api/v1/admin', adminRouter);
 
 // Serve Web Frontend SPA in production if built dist exists
 const possibleDistPaths = [

@@ -308,6 +308,19 @@ export const DashboardPage: React.FC = () => {
             <Settings className="w-4 h-4" />
             <span>Studio Profile</span>
           </button>
+
+          <button
+            onClick={() => navigate('/admin')}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-300 text-[#9A0026] hover:bg-rose-50 border border-rose-100 hover:border-rose-300 mt-2 font-semibold text-xs shadow-sm cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="w-4 h-4 text-[#9A0026]" />
+              <span>Admin Portal</span>
+            </div>
+            <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-100 text-[#9A0026] font-bold">
+              PIN: 2006
+            </span>
+          </button>
         </nav>
 
         {/* AI Engine Status Card */}
