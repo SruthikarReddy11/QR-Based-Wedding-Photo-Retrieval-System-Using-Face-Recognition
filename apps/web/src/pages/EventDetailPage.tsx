@@ -55,17 +55,24 @@ export const EventDetailPage: React.FC = () => {
   const fetchEventData = async () => {
     try {
       setLoading(true);
-      const [eventRes, photosRes] = await Promise.all([
-        api.get(`/events/${id}`),
-        api.get(`/events/${id}/photos`),
-      ]);
+      const eventRes = await api.get(`/events/${id}`);
       setEvent(eventRes.data);
-      setPhotos(photosRes.data || []);
 
-      const guestUrl = `${window.location.origin}/e/${eventRes.data.slug}`;
-      setQrCodeUrl(
-        `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=10&data=${encodeURIComponent(guestUrl)}`
-      );
+      const targetId = eventRes.data?.id || id;
+      try {
+        const photosRes = await api.get(`/events/${targetId}/photos`);
+        setPhotos(photosRes.data || []);
+      } catch (photoErr) {
+        console.warn('Could not load photos for event:', photoErr);
+        setPhotos([]);
+      }
+
+      if (eventRes.data?.slug) {
+        const guestUrl = `${window.location.origin}/e/${eventRes.data.slug}`;
+        setQrCodeUrl(
+          `https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=10&data=${encodeURIComponent(guestUrl)}`
+        );
+      }
     } catch (err) {
       console.error('Failed to load event data:', err);
     } finally {

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export const API_BASE = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/api\/v1\/?$/, '')
-  : typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+  : typeof window !== 'undefined' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
   ? window.location.origin
   : 'http://localhost:5000';
 
@@ -15,7 +15,7 @@ export const getImageUrl = (path: string): string => {
 export const api = axios.create({
   baseURL:
     import.meta.env.VITE_API_URL ||
-    (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    (typeof window !== 'undefined' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
       ? `${window.location.origin}/api/v1`
       : 'http://localhost:5000/api/v1'),
   headers: {

@@ -226,22 +226,41 @@ export class EventService {
 
   static async getEventById(id: string): Promise<WeddingEvent | null> {
     try {
-      const event = await prisma.event.findUnique({ where: { id } });
-      if (!event) return diskDb.events.get(id) || null;
-      return {
-        ...event,
-        eventDate: event.eventDate.toISOString(),
-        createdAt: event.createdAt.toISOString(),
-        updatedAt: event.updatedAt.toISOString(),
-      };
+      const event = await prisma.event.findFirst({
+        where: {
+          OR: [{ id }, { slug: id }],
+        },
+      });
+      if (event) {
+        return {
+          ...event,
+          eventDate: event.eventDate.toISOString(),
+          createdAt: event.createdAt.toISOString(),
+          updatedAt: event.updatedAt.toISOString(),
+        };
+      }
     } catch {
-      return diskDb.events.get(id) || null;
+      // fallback
     }
+
+    const direct = diskDb.events.get(id);
+    if (direct) return direct;
+    for (const ev of diskDb.events.values()) {
+      if (ev.id === id || ev.slug === id) return ev;
+    }
+    if (diskDb.events.size === 1) {
+      return Array.from(diskDb.events.values())[0];
+    }
+    return null;
   }
 
   static async getEventBySlug(slug: string): Promise<WeddingEvent | null> {
     try {
-      const event = await prisma.event.findUnique({ where: { slug } });
+      const event = await prisma.event.findFirst({
+        where: {
+          OR: [{ slug }, { id: slug }],
+        },
+      });
       if (event) {
         return {
           ...event,
@@ -255,48 +274,73 @@ export class EventService {
     }
 
     for (const ev of diskDb.events.values()) {
-      if (ev.slug === slug) return ev;
+      if (ev.slug === slug || ev.id === slug) return ev;
+    }
+    if (diskDb.events.size === 1) {
+      return Array.from(diskDb.events.values())[0];
     }
     return null;
   }
 
   static async incrementPhotoAndFaceCount(eventId: string, photosDelta: number, facesDelta: number): Promise<void> {
     try {
-      await prisma.event.update({
-        where: { id: eventId },
+      await prisma.event.updateMany({
+        where: { OR: [{ id: eventId }, { slug: eventId }] },
         data: {
           photoCount: { increment: photosDelta },
           faceCount: { increment: facesDelta },
         },
       });
     } catch {
-      const mem = diskDb.events.get(eventId);
-      if (mem) {
-        mem.photoCount = (mem.photoCount || 0) + photosDelta;
-        mem.faceCount = (mem.faceCount || 0) + facesDelta;
-        diskDb.events.set(eventId, mem);
-        diskDb.save();
+      // ignore
+    }
+
+    let target = diskDb.events.get(eventId);
+    if (!target) {
+      for (const [key, ev] of diskDb.events.entries()) {
+        if (ev.id === eventId || ev.slug === eventId) {
+          target = ev;
+          eventId = key;
+          break;
+        }
       }
+    }
+    if (target) {
+      target.photoCount = (target.photoCount || 0) + photosDelta;
+      target.faceCount = (target.faceCount || 0) + facesDelta;
+      diskDb.events.set(eventId, target);
+      diskDb.save();
     }
   }
 
   static async decrementPhotoAndFaceCount(eventId: string, facesDelta: number): Promise<void> {
     try {
-      await prisma.event.update({
-        where: { id: eventId },
+      await prisma.event.updateMany({
+        where: { OR: [{ id: eventId }, { slug: eventId }] },
         data: {
           photoCount: { decrement: 1 },
           faceCount: { decrement: facesDelta },
         },
       });
     } catch {
-      const mem = diskDb.events.get(eventId);
-      if (mem) {
-        mem.photoCount = Math.max(0, (mem.photoCount || 0) - 1);
-        mem.faceCount = Math.max(0, (mem.faceCount || 0) - facesDelta);
-        diskDb.events.set(eventId, mem);
-        diskDb.save();
+      // ignore
+    }
+
+    let target = diskDb.events.get(eventId);
+    if (!target) {
+      for (const [key, ev] of diskDb.events.entries()) {
+        if (ev.id === eventId || ev.slug === eventId) {
+          target = ev;
+          eventId = key;
+          break;
+        }
       }
+    }
+    if (target) {
+      target.photoCount = Math.max(0, (target.photoCount || 0) - 1);
+      target.faceCount = Math.max(0, (target.faceCount || 0) - facesDelta);
+      diskDb.events.set(eventId, target);
+      diskDb.save();
     }
   }
 

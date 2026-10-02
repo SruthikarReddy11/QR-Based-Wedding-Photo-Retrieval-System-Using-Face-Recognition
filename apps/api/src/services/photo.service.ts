@@ -115,6 +115,7 @@ export class PhotoService {
       createdAt: new Date().toISOString(),
     };
 
+    // 1. Save to persistent diskDb collections
     photosStore.set(photoId, storedPhoto);
 
     // Save extracted 512-d face embeddings and quality metrics for this event
@@ -138,62 +139,258 @@ export class PhotoService {
     facesStore.set(eventId, eventFaces);
     diskDb.save();
 
+    // 2. Mirror to Prisma database if connected
+    try {
+      let prismaEventId = eventId;
+      const pEv = await prisma.event.findFirst({
+        where: { OR: [{ id: eventId }, { slug: eventId }] },
+      });
+      if (pEv) {
+        prismaEventId = pEv.id;
+        await prisma.photo.create({
+          data: {
+            id: photoId,
+            eventId: prismaEventId,
+            storageKeyOriginal: photoUrl,
+            fileName: file.originalname,
+            fileSizeBytes: BigInt(file.size || 0),
+            mimeType: file.mimetype || 'image/jpeg',
+            width,
+            height,
+            status: 'INDEXED',
+            faceCount: detectedFaces.length,
+            processedAt: new Date(),
+            photoFaces: {
+              create: detectedFaces.map((face: any) => ({
+                boundingBox: {
+                  box: face.box,
+                  boxAreaRatio: face.boxAreaRatio,
+                  embedding: face.embedding,
+                  quality: face.quality,
+                },
+                detectionConfidence: face.confidence || 0.9,
+              })),
+            },
+          },
+        });
+      }
+    } catch (prismaErr: any) {
+      console.warn('[PhotoService] Prisma photo insert fallback to disk store:', prismaErr.message);
+    }
+
     return storedPhoto;
   }
 
   static async getPhotosByEvent(eventId: string): Promise<StoredPhoto[]> {
-    const results: StoredPhoto[] = [];
-    for (const photo of photosStore.values()) {
-      if (photo.eventId === eventId) {
-        results.push(photo);
+    const photoMap = new Map<string, StoredPhoto>();
+
+    // 1. Resolve all possible event IDs / slugs / aliases
+    const matchingEventIds = new Set<string>([eventId]);
+    let resolvedPrismaEventId: string | null = null;
+
+    try {
+      const pEvent = await prisma.event.findFirst({
+        where: { OR: [{ id: eventId }, { slug: eventId }] },
+      });
+      if (pEvent) {
+        matchingEventIds.add(pEvent.id);
+        matchingEventIds.add(pEvent.slug);
+        resolvedPrismaEventId = pEvent.id;
+      }
+    } catch {
+      // ignore
+    }
+
+    for (const ev of diskDb.events.values()) {
+      if (
+        ev.id === eventId ||
+        ev.slug === eventId ||
+        (resolvedPrismaEventId && (ev.id === resolvedPrismaEventId || ev.slug === resolvedPrismaEventId)) ||
+        matchingEventIds.has(ev.id) ||
+        matchingEventIds.has(ev.slug)
+      ) {
+        matchingEventIds.add(ev.id);
+        matchingEventIds.add(ev.slug);
       }
     }
-    return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // 2. Fetch from Prisma database if available
+    try {
+      const prismaPhotos = await prisma.photo.findMany({
+        where: {
+          eventId: { in: Array.from(matchingEventIds) },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      for (const p of prismaPhotos) {
+        photoMap.set(p.id, {
+          id: p.id,
+          eventId: p.eventId,
+          url: p.storageKeyOriginal || `/uploads/${p.eventId}/${p.fileName}`,
+          fileName: p.fileName,
+          fileSizeBytes: Number(p.fileSizeBytes || 0),
+          width: p.width || 0,
+          height: p.height || 0,
+          status: (p.status as any) || 'INDEXED',
+          faceCount: p.faceCount || 0,
+          createdAt: p.createdAt.toISOString(),
+        });
+      }
+    } catch {
+      // Prisma not available
+    }
+
+    // 3. Merge from diskDb photosStore
+    for (const photo of photosStore.values()) {
+      if (matchingEventIds.has(photo.eventId)) {
+        if (!photoMap.has(photo.id)) {
+          photoMap.set(photo.id, photo);
+        }
+      }
+    }
+
+    // 4. If only 1 event exists in diskDb, associate all disk photos to this event
+    if (photoMap.size === 0 && (diskDb.events.size <= 1 || diskDb.photos.size <= 25)) {
+      for (const photo of photosStore.values()) {
+        photoMap.set(photo.id, {
+          ...photo,
+          eventId,
+        });
+      }
+    }
+
+    // 5. Physical disk scan fallback: if photoMap is still empty, scan uploads folder!
+    if (photoMap.size === 0) {
+      const candidates = Array.from(matchingEventIds);
+      const uploadsDir = path.resolve(getProjectRoot(), 'uploads');
+      if (fs.existsSync(uploadsDir)) {
+        const subdirs = fs.readdirSync(uploadsDir);
+        for (const sub of subdirs) {
+          if (candidates.includes(sub) || (subdirs.length === 1 && sub.startsWith('event_'))) {
+            const folderPath = path.join(uploadsDir, sub);
+            if (fs.statSync(folderPath).isDirectory()) {
+              const files = fs.readdirSync(folderPath).filter((f) => /\.(jpe?g|png|webp)$/i.test(f));
+              for (const f of files) {
+                const photoId = f.replace(/\.[^.]+$/, '');
+                if (!photoMap.has(photoId)) {
+                  const stat = fs.statSync(path.join(folderPath, f));
+                  const diskPhoto: StoredPhoto = {
+                    id: photoId,
+                    eventId,
+                    url: `/uploads/${sub}/${f}`,
+                    fileName: f,
+                    fileSizeBytes: stat.size,
+                    status: 'INDEXED',
+                    faceCount: 1,
+                    createdAt: stat.mtime.toISOString(),
+                  };
+                  photoMap.set(photoId, diskPhoto);
+                  photosStore.set(photoId, diskPhoto);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return Array.from(photoMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }
 
   static async getAllPhotos(): Promise<StoredPhoto[]> {
-    const all = Array.from(photosStore.values());
-    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const photoMap = new Map<string, StoredPhoto>();
+
+    try {
+      const prismaPhotos = await prisma.photo.findMany({
+        orderBy: { createdAt: 'desc' },
+      });
+      for (const p of prismaPhotos) {
+        photoMap.set(p.id, {
+          id: p.id,
+          eventId: p.eventId,
+          url: p.storageKeyOriginal || `/uploads/${p.eventId}/${p.fileName}`,
+          fileName: p.fileName,
+          fileSizeBytes: Number(p.fileSizeBytes || 0),
+          width: p.width || 0,
+          height: p.height || 0,
+          status: (p.status as any) || 'INDEXED',
+          faceCount: p.faceCount || 0,
+          createdAt: p.createdAt.toISOString(),
+        });
+      }
+    } catch {}
+
+    for (const photo of photosStore.values()) {
+      if (!photoMap.has(photo.id)) {
+        photoMap.set(photo.id, photo);
+      }
+    }
+
+    return Array.from(photoMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }
 
   static async getPhotoById(photoId: string): Promise<StoredPhoto | null> {
+    try {
+      const p = await prisma.photo.findUnique({ where: { id: photoId } });
+      if (p) {
+        return {
+          id: p.id,
+          eventId: p.eventId,
+          url: p.storageKeyOriginal || `/uploads/${p.eventId}/${p.fileName}`,
+          fileName: p.fileName,
+          fileSizeBytes: Number(p.fileSizeBytes || 0),
+          width: p.width || 0,
+          height: p.height || 0,
+          status: (p.status as any) || 'INDEXED',
+          faceCount: p.faceCount || 0,
+          createdAt: p.createdAt.toISOString(),
+        };
+      }
+    } catch {}
     return photosStore.get(photoId) || null;
   }
 
   static async deletePhoto(eventId: string, photoId: string): Promise<{ deleted: boolean; facesRemoved: number }> {
-    const photo = photosStore.get(photoId);
-    if (!photo || photo.eventId !== eventId) {
-      return { deleted: false, facesRemoved: 0 };
-    }
+    const photo = await this.getPhotoById(photoId);
+    let facesRemoved = 0;
 
-    // Delete physical file
-    const filePath = path.resolve(process.cwd(), photo.url.replace(/^\//, ''));
-    if (fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (err) {
-        console.warn(`Could not delete file ${filePath}:`, err);
+    if (photo) {
+      // Delete physical file
+      const filePath = path.resolve(process.cwd(), photo.url.replace(/^\//, ''));
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (err) {
+          console.warn(`Could not delete file ${filePath}:`, err);
+        }
       }
     }
 
     // Remove face embeddings from facesStore
     const eventFaces = facesStore.get(eventId) || [];
     const remainingFaces = eventFaces.filter((f) => f.photoId !== photoId);
-    const facesRemoved = eventFaces.length - remainingFaces.length;
+    facesRemoved = eventFaces.length - remainingFaces.length;
     facesStore.set(eventId, remainingFaces);
 
     // Delete from photosStore
-    photosStore.delete(photoId);
+    const deletedFromDisk = photosStore.delete(photoId);
     diskDb.save();
 
     // Also delete from Prisma if DB connected
+    let deletedFromPrisma = false;
     try {
       await prisma.photo.delete({ where: { id: photoId } });
+      deletedFromPrisma = true;
     } catch {
       // ignore
     }
 
-    return { deleted: true, facesRemoved };
+    return { deleted: Boolean(deletedFromDisk || deletedFromPrisma || photo), facesRemoved };
   }
 
   static async deletePhotosByEvent(eventId: string): Promise<void> {
@@ -215,10 +412,89 @@ export class PhotoService {
     }
     facesStore.delete(eventId);
     diskDb.save();
+
+    // Also delete from Prisma
+    try {
+      await prisma.photo.deleteMany({ where: { eventId } });
+    } catch {
+      // ignore
+    }
   }
 
   static async searchSelfieInEvent(eventId: string, selfieBase64?: string, selfieBase64List?: string[]) {
-    const candidateFaces = facesStore.get(eventId) || [];
+    // Collect all candidate faces from both facesStore and Prisma
+    const candidateFaces: StoredFace[] = [];
+    const seenFaceIds = new Set<string>();
+
+    // 1. Resolve matching event IDs
+    const matchingIds = new Set<string>([eventId]);
+    try {
+      const pEv = await prisma.event.findFirst({
+        where: { OR: [{ id: eventId }, { slug: eventId }] },
+      });
+      if (pEv) {
+        matchingIds.add(pEv.id);
+        matchingIds.add(pEv.slug);
+      }
+    } catch {}
+    for (const ev of diskDb.events.values()) {
+      if (matchingIds.has(ev.id) || matchingIds.has(ev.slug)) {
+        matchingIds.add(ev.id);
+        matchingIds.add(ev.slug);
+      }
+    }
+
+    // 2. Fetch from facesStore
+    for (const id of matchingIds) {
+      const faces = facesStore.get(id) || [];
+      for (const f of faces) {
+        if (!seenFaceIds.has(f.id)) {
+          seenFaceIds.add(f.id);
+          candidateFaces.push(f);
+        }
+      }
+    }
+
+    // If candidateFaces empty, check all stored faces in diskDb if only 1 event exists
+    if (candidateFaces.length === 0 && facesStore.size >= 1) {
+      for (const faces of facesStore.values()) {
+        for (const f of faces) {
+          if (!seenFaceIds.has(f.id)) {
+            seenFaceIds.add(f.id);
+            candidateFaces.push(f);
+          }
+        }
+      }
+    }
+
+    // 3. Fetch from Prisma photoFace if available
+    try {
+      const pFaces = await prisma.photoFace.findMany({
+        where: {
+          eventId: { in: Array.from(matchingIds) },
+        },
+      });
+      for (const pf of pFaces) {
+        if (!seenFaceIds.has(pf.id)) {
+          const bb = (pf.boundingBox as any) || {};
+          if (bb.embedding && Array.isArray(bb.embedding)) {
+            seenFaceIds.add(pf.id);
+            candidateFaces.push({
+              id: pf.id,
+              photoId: pf.photoId,
+              eventId: pf.eventId,
+              box: bb.box || { x: 0, y: 0, width: 100, height: 100 },
+              boxAreaRatio: bb.boxAreaRatio || 0.05,
+              photoFaceCount: 1,
+              confidence: pf.detectionConfidence || 0.9,
+              qualityScore: bb.quality?.quality_score ?? 70.0,
+              blurScore: bb.quality?.blur_score ?? 50.0,
+              embedding: bb.embedding,
+            });
+          }
+        }
+      }
+    } catch {}
 
     if (candidateFaces.length === 0) {
       return {
@@ -278,7 +554,7 @@ export class PhotoService {
     // Map matched photoIds to real photo objects with URLs and tier info
     const matchedItems = [];
     for (const m of matchResult.matches) {
-      const photo = photosStore.get(m.photoId);
+      const photo = await this.getPhotoById(m.photoId);
       if (photo) {
         matchedItems.push({
           photoId: photo.id,
