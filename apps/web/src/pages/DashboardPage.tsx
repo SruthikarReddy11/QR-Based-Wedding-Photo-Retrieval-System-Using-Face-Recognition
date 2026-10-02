@@ -142,6 +142,7 @@ export const DashboardPage: React.FC = () => {
 
     try {
       const res = await api.post('/events', {
+        title: `${createForm.coupleNames} Wedding Memories`,
         coupleNames: createForm.coupleNames,
         eventDate: createForm.eventDate,
         venueCity: createForm.venueCity || 'City',

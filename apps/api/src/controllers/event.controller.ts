@@ -6,8 +6,8 @@ import QRCode from 'qrcode';
 export class EventController {
   static async create(req: AuthRequest, res: Response): Promise<void> {
     try {
-      const photographerId = req.user?.photographerId || 'demo_studio_1';
-      const event = await EventService.createEvent(photographerId, req.body);
+      const photographerId = req.user?.photographerId || req.user?.userId || 'demo_studio_1';
+      const event = await EventService.createEvent(photographerId, req.body, req.user?.userId);
       res.status(201).json(event);
     } catch (error: any) {
       res.status(400).json({ error: error.message || 'Failed to create event.' });
@@ -17,7 +17,7 @@ export class EventController {
   static async list(req: AuthRequest, res: Response): Promise<void> {
     try {
       const photographerId = req.user?.photographerId;
-      const events = await EventService.getEvents(photographerId);
+      const events = await EventService.getEvents(photographerId, req.user?.userId);
       res.status(200).json(events);
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Failed to fetch events.' });
@@ -54,7 +54,7 @@ export class EventController {
 
   static async getStats(req: AuthRequest, res: Response): Promise<void> {
     try {
-      const stats = await EventService.getDashboardStats(req.user?.photographerId);
+      const stats = await EventService.getDashboardStats(req.user?.photographerId, req.user?.userId);
       res.status(200).json(stats);
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Failed to fetch dashboard stats.' });

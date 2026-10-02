@@ -751,38 +751,46 @@ export const AdminPortalPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {usersList.map((u: any) => (
-                  <tr key={u.id} className="hover:bg-rose-50/30 transition">
-                    <td className="py-3.5 px-4 font-semibold text-gray-900">{u.fullName || 'User'}</td>
-                    <td className="py-3.5 px-4 font-mono text-gray-600">{u.email}</td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          u.role === 'ADMIN'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
-                      >
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-gray-800">{u.eventsCount || 0}</td>
-                    <td className="py-3.5 px-4 text-gray-500">
-                      {new Date(u.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      {u.role !== 'ADMIN' && (
-                        <button
-                          onClick={() => handleDeleteUser(u.id, u.email)}
-                          className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-[#9A0026] font-medium cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 inline mr-1" />
-                          <span>Delete User</span>
-                        </button>
-                      )}
+                {usersList.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-gray-500">
+                      No user accounts found. Registered photographers will appear here.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  usersList.map((u: any) => (
+                    <tr key={u.id} className="hover:bg-rose-50/30 transition">
+                      <td className="py-3.5 px-4 font-semibold text-gray-900">{u.fullName || 'User'}</td>
+                      <td className="py-3.5 px-4 font-mono text-gray-600">{u.email}</td>
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            u.role === 'ADMIN'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-gray-800">{u.eventsCount || 0}</td>
+                      <td className="py-3.5 px-4 text-gray-500">
+                        {new Date(u.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        {u.role !== 'ADMIN' && (
+                          <button
+                            onClick={() => handleDeleteUser(u.id, u.email)}
+                            className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-[#9A0026] font-medium cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+                            <span>Delete User</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

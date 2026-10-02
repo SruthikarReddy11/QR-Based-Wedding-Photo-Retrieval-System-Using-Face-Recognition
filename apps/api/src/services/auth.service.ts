@@ -39,12 +39,31 @@ export class AuthService {
         },
       });
 
+      const photographerId = newUser.photographer?.id || `photo_${newUser.id}`;
+      // Mirror to diskDb for unified stats & disk persistence
+      diskDb.users.set(existingEmail, {
+        id: newUser.id,
+        email: newUser.email,
+        passwordHash,
+        fullName: newUser.fullName,
+        phoneNumber: newUser.phoneNumber || undefined,
+        role: newUser.role,
+        createdAt: newUser.createdAt.toISOString(),
+        updatedAt: newUser.updatedAt.toISOString(),
+      });
+      diskDb.photographers.set(photographerId, {
+        id: photographerId,
+        userId: newUser.id,
+        studioName: dto.studioName || `${dto.fullName}'s Studio`,
+      });
+      diskDb.save();
+
       const token = jwt.sign(
         {
           userId: newUser.id,
           email: newUser.email,
           role: newUser.role,
-          photographerId: newUser.photographer?.id,
+          photographerId,
         },
         ENV.JWT_SECRET,
         { expiresIn: '7d' }
@@ -141,12 +160,45 @@ export class AuthService {
         throw new Error('Invalid email or password.');
       }
 
+      let photographerId = user.photographer?.id;
+      if (!photographerId) {
+        try {
+          const newPhoto = await prisma.photographer.create({
+            data: {
+              userId: user.id,
+              studioName: `${user.fullName}'s Studio`,
+            },
+          });
+          photographerId = newPhoto.id;
+        } catch {
+          photographerId = `photo_${user.id}`;
+        }
+      }
+
+      // Always mirror authenticated user to diskDb for unified stats & disk persistence
+      diskDb.users.set(user.email, {
+        id: user.id,
+        email: user.email,
+        passwordHash: user.passwordHash,
+        fullName: user.fullName,
+        phoneNumber: user.phoneNumber || undefined,
+        role: user.role,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      });
+      diskDb.photographers.set(photographerId, {
+        id: photographerId,
+        userId: user.id,
+        studioName: user.photographer?.studioName || `${user.fullName}'s Studio`,
+      });
+      diskDb.save();
+
       const token = jwt.sign(
         {
           userId: user.id,
           email: user.email,
           role: user.role,
-          photographerId: user.photographer?.id,
+          photographerId,
         },
         ENV.JWT_SECRET,
         { expiresIn: '7d' }

@@ -4,6 +4,7 @@ import os from 'os';
 import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express';
 import { ENV } from '../config/env.js';
+import { prisma } from '../db/prisma.js';
 import { diskDb, getProjectRoot } from '../db/diskDb.js';
 import { EventService } from '../services/event.service.js';
 import { PhotoService } from '../services/photo.service.js';
@@ -103,19 +104,64 @@ export class AdminController {
       }
 
       // User & Event Metrics
-      const allUsers = Array.from(diskDb.users.values());
+      const userMap = new Map<string, any>();
+      try {
+        const prismaUsers = await prisma.user.findMany({
+          include: { photographer: true },
+        });
+        for (const u of prismaUsers) {
+          const key = (u.email || u.id).toLowerCase();
+          userMap.set(key, {
+            id: u.id,
+            email: u.email,
+            fullName: u.fullName,
+            role: u.role || (u.photographer ? 'PHOTOGRAPHER' : 'USER'),
+            createdAt: u.createdAt,
+          });
+        }
+      } catch {
+        // Prisma not available or offline
+      }
+
+      for (const u of diskDb.users.values()) {
+        if (!u) continue;
+        const key = (u.email || u.id).toLowerCase();
+        if (!userMap.has(key)) {
+          userMap.set(key, {
+            id: u.id,
+            email: u.email,
+            fullName: u.fullName || u.name,
+            role: u.role || 'PHOTOGRAPHER',
+            createdAt: u.createdAt,
+          });
+        }
+      }
+
+      const allUsers = Array.from(userMap.values());
       const totalUsers = allUsers.length;
       const photographers = allUsers.filter((u: any) => u.role === 'PHOTOGRAPHER').length;
       const admins = allUsers.filter((u: any) => u.role === 'ADMIN').length;
 
-      const allEvents = Array.from(diskDb.events.values());
+      const allEvents = await EventService.getEvents();
       const totalEvents = allEvents.length;
-      const totalPhotos = diskDb.photos.size;
+      let totalPhotos = diskDb.photos.size;
+      try {
+        const pCount = await prisma.photo.count();
+        totalPhotos = Math.max(totalPhotos, pCount);
+      } catch {
+        // ignore
+      }
 
       // Count total faces stored
       let totalFacesIndexed = 0;
       for (const faces of diskDb.faces.values()) {
         totalFacesIndexed += (faces || []).length;
+      }
+      try {
+        const fCount = await prisma.faceEmbedding.count();
+        totalFacesIndexed = Math.max(totalFacesIndexed, fCount);
+      } catch {
+        // ignore
       }
 
       res.status(200).json({
@@ -149,7 +195,7 @@ export class AdminController {
           totalUsers,
           photographers,
           admins,
-          activeNow: Math.max(1, totalUsers),
+          activeNow: totalUsers > 0 ? 1 : 0,
         },
         catalog: {
           totalEvents,
@@ -167,31 +213,75 @@ export class AdminController {
   // 3. List All Users
   static async listUsers(_req: Request, res: Response): Promise<void> {
     try {
-      const allUsers = Array.from(diskDb.users.values()).map((u: any) => {
-        // Collect all photographer IDs for this user
-        const photoIds = new Set<string>([u.id, `photo_${u.id}`]);
+      const userMap = new Map<string, any>();
+      const allEvents = await EventService.getEvents();
+
+      try {
+        const prismaUsers = await prisma.user.findMany({
+          include: { photographer: true },
+        });
+        for (const u of prismaUsers) {
+          const key = (u.email || u.id).toLowerCase();
+          userMap.set(key, {
+            id: u.id,
+            fullName: u.fullName,
+            email: u.email,
+            role: u.role || 'PHOTOGRAPHER',
+            createdAt: u.createdAt ? new Date(u.createdAt).toISOString() : new Date().toISOString(),
+            photographerId: u.photographer?.id,
+          });
+        }
+      } catch {
+        // Prisma not available
+      }
+
+      for (const u of diskDb.users.values()) {
+        if (!u) continue;
+        const key = (u.email || u.id).toLowerCase();
+        if (!userMap.has(key)) {
+          userMap.set(key, {
+            id: u.id,
+            fullName: u.fullName || u.name,
+            email: u.email,
+            role: u.role || 'PHOTOGRAPHER',
+            createdAt: u.createdAt || new Date().toISOString(),
+          });
+        }
+      }
+
+      const usersList = Array.from(userMap.values()).map((u) => {
+        // Collect all possible IDs associated with this user
+        const matchIds = new Set<string>([u.id, (u.email || '').toLowerCase()]);
+        if (u.photographerId) {
+          matchIds.add(u.photographerId);
+        }
         for (const p of diskDb.photographers.values()) {
-          if (p.userId === u.id) {
-            photoIds.add(p.id);
+          if (p.userId === u.id || p.id === u.id) {
+            matchIds.add(p.id);
+            matchIds.add(p.userId);
           }
         }
 
         // Count events created by this user
-        const userEvents = Array.from(diskDb.events.values()).filter(
-          (e: any) => photoIds.has(e.photographerId) || (diskDb.users.size === 1)
+        const userEvents = allEvents.filter(
+          (e: any) =>
+            matchIds.has(e.photographerId) ||
+            matchIds.has(e.photographer?.userId) ||
+            matchIds.has((e.photographer?.email || '').toLowerCase()) ||
+            userMap.size === 1
         );
 
         return {
           id: u.id,
-          fullName: u.fullName || u.name,
+          fullName: u.fullName || 'Photographer',
           email: u.email,
           role: u.role || 'PHOTOGRAPHER',
-          createdAt: u.createdAt || new Date().toISOString(),
+          createdAt: u.createdAt,
           eventsCount: userEvents.length,
         };
       });
 
-      res.status(200).json(allUsers);
+      res.status(200).json(usersList);
     } catch (err: any) {
       res.status(500).json({ error: err.message || 'Failed to list users.' });
     }
@@ -201,9 +291,10 @@ export class AdminController {
   static async deleteUser(req: Request, res: Response): Promise<void> {
     try {
       const userId = String(req.params.id);
-      let userKey: string | null = null;
       let targetUser: any = null;
+      let userKey: string | null = null;
 
+      // 1. Check diskDb
       for (const [key, u] of diskDb.users.entries()) {
         if (u.id === userId || key === userId || u.email === userId) {
           userKey = key;
@@ -212,15 +303,40 @@ export class AdminController {
         }
       }
 
-      if (!targetUser || !userKey) {
+      // 2. Check Prisma
+      let prismaUser: any = null;
+      try {
+        prismaUser = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { id: userId },
+              { email: userId },
+            ],
+          },
+          include: { photographer: true },
+        });
+        if (prismaUser && !targetUser) {
+          targetUser = prismaUser;
+        }
+      } catch {}
+
+      if (!targetUser && !prismaUser) {
         res.status(404).json({ error: 'User not found.' });
         return;
       }
 
       // Collect all photographer IDs for this user
-      const photoIds = new Set<string>([targetUser.id, `photo_${targetUser.id}`]);
+      const photoIds = new Set<string>([
+        userId,
+        targetUser?.id,
+        targetUser?.email,
+        prismaUser?.id,
+        prismaUser?.email,
+        prismaUser?.photographer?.id,
+      ].filter(Boolean) as string[]);
+
       for (const [pId, p] of diskDb.photographers.entries()) {
-        if (p.userId === targetUser.id) {
+        if (photoIds.has(p.userId) || photoIds.has(p.id)) {
           photoIds.add(pId);
           photoIds.add(p.id);
           diskDb.photographers.delete(pId);
@@ -228,14 +344,30 @@ export class AdminController {
       }
 
       // Delete all events belonging to this user
-      const userEvents = Array.from(diskDb.events.values()).filter(
-        (e: any) => photoIds.has(e.photographerId) || e.photographerId === targetUser.id
-      );
+      const allEvents = await EventService.getEvents();
+      const userEvents = allEvents.filter((e: any) => photoIds.has(e.photographerId));
       for (const ev of userEvents) {
         await EventService.deleteEvent(ev.id);
       }
 
-      diskDb.users.delete(userKey);
+      // Delete from Prisma
+      if (prismaUser) {
+        try {
+          await prisma.user.delete({ where: { id: prismaUser.id } });
+        } catch (e: any) {
+          console.warn('[AdminController] Prisma user delete notice:', e.message);
+        }
+      }
+
+      // Delete from diskDb
+      if (userKey) {
+        diskDb.users.delete(userKey);
+      }
+      for (const [key, u] of diskDb.users.entries()) {
+        if (photoIds.has(u.id) || photoIds.has(u.email)) {
+          diskDb.users.delete(key);
+        }
+      }
       diskDb.save();
 
       res.status(200).json({
@@ -249,33 +381,53 @@ export class AdminController {
   // 5. List All Events Across All Photographers
   static async listAllEvents(_req: Request, res: Response): Promise<void> {
     try {
-      const events = Array.from(diskDb.events.values()).map((ev: any) => {
-        const photographer =
-          diskDb.photographers.get(ev.photographerId) ||
-          Array.from(diskDb.photographers.values()).find(
-            (p: any) => p.id === ev.photographerId || p.userId === ev.photographerId
-          );
+      const allEvents = await EventService.getEvents();
 
-        let creator: any = null;
-        if (photographer?.userId) {
-          creator = Array.from(diskDb.users.values()).find((u: any) => u.id === photographer.userId);
+      // Build user / photographer lookup maps
+      const userLookup = new Map<string, any>();
+      try {
+        const pUsers = await prisma.user.findMany({ include: { photographer: true } });
+        for (const u of pUsers) {
+          userLookup.set(u.id, u);
+          userLookup.set((u.email || '').toLowerCase(), u);
+          if (u.photographer) {
+            userLookup.set(u.photographer.id, u);
+          }
         }
-        if (!creator) {
-          creator = Array.from(diskDb.users.values()).find(
-            (u: any) => u.id === ev.photographerId || u.email === ev.photographerId
-          );
+      } catch {}
+
+      for (const u of diskDb.users.values()) {
+        if (!u) continue;
+        userLookup.set(u.id, u);
+        if (u.email) userLookup.set(u.email.toLowerCase(), u);
+      }
+
+      for (const p of diskDb.photographers.values()) {
+        if (!p) continue;
+        const owner = userLookup.get(p.userId);
+        if (owner) {
+          userLookup.set(p.id, owner);
         }
-        if (!creator && diskDb.users.size === 1) {
-          creator = Array.from(diskDb.users.values())[0];
+      }
+
+      const events = allEvents.map((ev: any) => {
+        let creator = userLookup.get(ev.photographerId);
+        if (!creator && userLookup.size > 0) {
+          const uniqueUsers = Array.from(new Set(userLookup.values()));
+          if (uniqueUsers.length === 1) {
+            creator = uniqueUsers[0];
+          }
         }
 
         const faces = diskDb.faces.get(ev.id) || [];
+        const totalFaces = faces.length || ev.faceCount || 0;
+
         return {
           ...ev,
           name: ev.title || ev.coupleNames || 'Wedding Event',
-          creatorName: creator ? creator.fullName || creator.name : 'Master Studio',
+          creatorName: creator ? (creator.fullName || creator.name) : 'Master Studio',
           creatorEmail: creator ? creator.email : 'studio@wedsnap.ai',
-          totalFacesIndexed: faces.length,
+          totalFacesIndexed: totalFaces,
         };
       });
 

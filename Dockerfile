@@ -28,6 +28,7 @@ COPY packages/ ./packages/
 COPY apps/ ./apps/
 COPY models/ ./models/
 COPY scripts/ ./scripts/
+COPY data/ ./data/
 COPY tsconfig*.json ./
 COPY start.sh ./
 RUN chmod +x start.sh
