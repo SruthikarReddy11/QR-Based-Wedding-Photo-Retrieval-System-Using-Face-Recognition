@@ -617,7 +617,7 @@ export const GuestEventPage: React.FC = () => {
                     className="aspect-[3/4] rounded-2xl overflow-hidden bg-slate-200 border border-[#EFE9E1] relative cursor-pointer group shadow-sm hover:shadow-md transition-all"
                   >
                     <img
-                      src={getImageUrl(photo.url)}
+                      src={photo.imageData || getImageUrl(photo.url)}
                       alt="Found wedding photo"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
@@ -673,7 +673,7 @@ export const GuestEventPage: React.FC = () => {
 
           <div className="relative flex-1 flex items-center justify-center p-4">
             <img
-              src={getImageUrl(filteredPhotos[selectedPhotoIndex].url)}
+              src={filteredPhotos[selectedPhotoIndex].imageData || getImageUrl(filteredPhotos[selectedPhotoIndex].url)}
               alt="Fullscreen Wedding View"
               className="max-h-[75vh] max-w-full object-contain rounded-2xl shadow-2xl"
             />
@@ -711,7 +711,7 @@ export const GuestEventPage: React.FC = () => {
             </button>
 
             <a
-              href={getImageUrl(filteredPhotos[selectedPhotoIndex].url)}
+              href={filteredPhotos[selectedPhotoIndex].imageData || getImageUrl(filteredPhotos[selectedPhotoIndex].url)}
               download
               target="_blank"
               rel="noreferrer"

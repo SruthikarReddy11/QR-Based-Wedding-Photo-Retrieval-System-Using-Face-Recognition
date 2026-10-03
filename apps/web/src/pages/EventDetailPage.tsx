@@ -680,7 +680,7 @@ export const EventDetailPage: React.FC = () => {
                       }`}
                     >
                       <img
-                        src={getImageUrl(photo.url)}
+                        src={photo.imageData || getImageUrl(photo.url)}
                         alt={photo.fileName}
                         loading="lazy"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -1048,7 +1048,7 @@ export const EventDetailPage: React.FC = () => {
             {/* Image Preview Box */}
             <div className="sm:w-2/3 bg-black/95 flex items-center justify-center p-4 min-h-[300px] sm:min-h-[500px]">
               <img
-                src={getImageUrl(selectedPhoto.url)}
+                src={selectedPhoto.imageData || getImageUrl(selectedPhoto.url)}
                 alt={selectedPhoto.fileName}
                 className="max-h-[80vh] w-auto max-w-full object-contain rounded-lg"
               />
@@ -1103,7 +1103,7 @@ export const EventDetailPage: React.FC = () => {
               {/* Action Buttons */}
               <div className="space-y-2 pt-6 border-t border-[#EFE9E1]">
                 <a
-                  href={getImageUrl(selectedPhoto.url)}
+                  href={selectedPhoto.imageData || getImageUrl(selectedPhoto.url)}
                   download={selectedPhoto.fileName}
                   target="_blank"
                   rel="noreferrer"

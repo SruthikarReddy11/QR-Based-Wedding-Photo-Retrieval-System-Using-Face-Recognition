@@ -14,6 +14,7 @@ export interface StoredPhoto {
   height?: number;
   status: 'INDEXED' | 'FAILED';
   faceCount: number;
+  imageData?: string;
   createdAt: string;
 }
 
@@ -102,6 +103,18 @@ export class PhotoService {
       console.error(`[AI Worker] Could not connect to AI microservice: ${err.message}`);
     }
 
+    // Read file bytes into Base64 data URL for permanent database storage across server restarts
+    let base64DataUrl = '';
+    try {
+      if (fs.existsSync(finalFilePath)) {
+        const fileBuffer = fs.readFileSync(finalFilePath);
+        const mime = file.mimetype || 'image/jpeg';
+        base64DataUrl = `data:${mime};base64,${fileBuffer.toString('base64')}`;
+      }
+    } catch (readErr: any) {
+      console.warn('[PhotoService] Failed reading photo bytes for Base64 storage:', readErr.message);
+    }
+
     const storedPhoto: StoredPhoto = {
       id: photoId,
       eventId,
@@ -112,6 +125,7 @@ export class PhotoService {
       height,
       status: 'INDEXED',
       faceCount: detectedFaces.length,
+      imageData: base64DataUrl || undefined,
       createdAt: new Date().toISOString(),
     };
 
@@ -152,6 +166,8 @@ export class PhotoService {
             id: photoId,
             eventId: prismaEventId,
             storageKeyOriginal: photoUrl,
+            storageKeyPreview: base64DataUrl || null,
+            imageData: base64DataUrl || null,
             fileName: file.originalname,
             fileSizeBytes: BigInt(file.size || 0),
             mimeType: file.mimetype || 'image/jpeg',
@@ -224,16 +240,35 @@ export class PhotoService {
       });
 
       for (const p of prismaPhotos) {
+        const photoUrl = p.storageKeyOriginal || `/uploads/${p.eventId}/${p.fileName}`;
+        const imgData = p.imageData || p.storageKeyPreview || undefined;
+
+        // Auto-rehydrate to physical disk if missing (e.g. after container restart)
+        if (imgData && imgData.includes('base64,')) {
+          try {
+            const diskPath = path.resolve(getProjectRoot(), photoUrl.replace(/^\//, ''));
+            if (!fs.existsSync(diskPath)) {
+              const dir = path.dirname(diskPath);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              const rawBase64 = imgData.split('base64,')[1];
+              fs.writeFileSync(diskPath, Buffer.from(rawBase64, 'base64'));
+            }
+          } catch (rehydrateErr) {
+            console.warn('[PhotoService] Rehydration to disk failed:', rehydrateErr);
+          }
+        }
+
         photoMap.set(p.id, {
           id: p.id,
           eventId: p.eventId,
-          url: p.storageKeyOriginal || `/uploads/${p.eventId}/${p.fileName}`,
+          url: photoUrl,
           fileName: p.fileName,
           fileSizeBytes: Number(p.fileSizeBytes || 0),
           width: p.width || 0,
           height: p.height || 0,
           status: (p.status as any) || 'INDEXED',
           faceCount: p.faceCount || 0,
+          imageData: imgData,
           createdAt: p.createdAt.toISOString(),
         });
       }
@@ -244,8 +279,28 @@ export class PhotoService {
     // 3. Merge from diskDb photosStore
     for (const photo of photosStore.values()) {
       if (matchingEventIds.has(photo.eventId)) {
+        // Auto-rehydrate to physical disk if missing
+        if (photo.imageData && photo.imageData.includes('base64,')) {
+          try {
+            const diskPath = path.resolve(getProjectRoot(), photo.url.replace(/^\//, ''));
+            if (!fs.existsSync(diskPath)) {
+              const dir = path.dirname(diskPath);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              const rawBase64 = photo.imageData.split('base64,')[1];
+              fs.writeFileSync(diskPath, Buffer.from(rawBase64, 'base64'));
+            }
+          } catch (rehydrateErr) {
+            console.warn('[PhotoService] Rehydration to disk failed:', rehydrateErr);
+          }
+        }
+
         if (!photoMap.has(photo.id)) {
           photoMap.set(photo.id, photo);
+        } else {
+          const existing = photoMap.get(photo.id)!;
+          if (!existing.imageData && photo.imageData) {
+            existing.imageData = photo.imageData;
+          }
         }
       }
     }
@@ -275,6 +330,13 @@ export class PhotoService {
                 const photoId = f.replace(/\.[^.]+$/, '');
                 if (!photoMap.has(photoId)) {
                   const stat = fs.statSync(path.join(folderPath, f));
+                  let scannedImageData: string | undefined = undefined;
+                  try {
+                    const buf = fs.readFileSync(path.join(folderPath, f));
+                    const mime = f.endsWith('.png') ? 'image/png' : f.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+                    scannedImageData = `data:${mime};base64,${buf.toString('base64')}`;
+                  } catch {}
+
                   const diskPhoto: StoredPhoto = {
                     id: photoId,
                     eventId,
@@ -283,6 +345,7 @@ export class PhotoService {
                     fileSizeBytes: stat.size,
                     status: 'INDEXED',
                     faceCount: 1,
+                    imageData: scannedImageData,
                     createdAt: stat.mtime.toISOString(),
                   };
                   photoMap.set(photoId, diskPhoto);
@@ -318,6 +381,7 @@ export class PhotoService {
           height: p.height || 0,
           status: (p.status as any) || 'INDEXED',
           faceCount: p.faceCount || 0,
+          imageData: p.imageData || p.storageKeyPreview || undefined,
           createdAt: p.createdAt.toISOString(),
         });
       }
@@ -326,6 +390,11 @@ export class PhotoService {
     for (const photo of photosStore.values()) {
       if (!photoMap.has(photo.id)) {
         photoMap.set(photo.id, photo);
+      } else {
+        const existing = photoMap.get(photo.id)!;
+        if (!existing.imageData && photo.imageData) {
+          existing.imageData = photo.imageData;
+        }
       }
     }
 
@@ -348,6 +417,7 @@ export class PhotoService {
           height: p.height || 0,
           status: (p.status as any) || 'INDEXED',
           faceCount: p.faceCount || 0,
+          imageData: p.imageData || p.storageKeyPreview || undefined,
           createdAt: p.createdAt.toISOString(),
         };
       }
@@ -559,6 +629,7 @@ export class PhotoService {
         matchedItems.push({
           photoId: photo.id,
           url: photo.url,
+          imageData: photo.imageData,
           fileName: photo.fileName,
           similarityScore: m.similarityScore,
           matchTier: m.matchTier || (m.similarityScore >= 0.45 ? 'high_confidence' : 'suggested'),

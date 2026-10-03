@@ -8,7 +8,7 @@ export const API_BASE = import.meta.env.VITE_API_URL
 
 export const getImageUrl = (path: string): string => {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) return path;
   return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 

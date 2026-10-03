@@ -101,6 +101,7 @@ model Photo {
   height             Int?
   status             PhotoStatus    @default(PENDING_UPLOAD)
   faceCount          Int            @default(0) @map("face_count")
+  imageData          String?        @map("image_data")
   errorMessage       String?        @map("error_message")
   uploadedAt         DateTime?      @map("uploaded_at")
   processedAt        DateTime?      @map("processed_at")

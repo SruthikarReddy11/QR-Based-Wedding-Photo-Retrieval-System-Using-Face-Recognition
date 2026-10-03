@@ -818,7 +818,7 @@ export const DashboardPage: React.FC = () => {
                       className="group aspect-[3/4] rounded-2xl overflow-hidden bg-slate-100 border border-[#EFE9E1] relative shadow-xs hover:shadow-md transition-all cursor-pointer"
                     >
                       <img
-                        src={getImageUrl(photo.url)}
+                        src={photo.imageData || getImageUrl(photo.url)}
                         alt={photo.fileName}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
@@ -1144,7 +1144,7 @@ export const DashboardPage: React.FC = () => {
               <X className="w-6 h-6" />
             </button>
             <img
-              src={getImageUrl(lightboxPhoto.url)}
+              src={lightboxPhoto.imageData || getImageUrl(lightboxPhoto.url)}
               alt={lightboxPhoto.fileName}
               className="max-h-[80vh] w-auto object-contain rounded-2xl shadow-2xl"
             />
